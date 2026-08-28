@@ -59,7 +59,7 @@ interface Ctx {
   };
   aantalKavels: number;
   prijs: typeof EENHEIDSPRIJS_DEFAULTS;
-  gedeeldPerApp: number; // totaal gedeelde huurderskosten / aantal kavels
+  gedeeldPerCategorie: Map<string, number>; // som per categorie (gelijk_huurders)
 }
 
 async function laadContext(db: Db, boekjaarId: string): Promise<Ctx> {
@@ -95,20 +95,29 @@ async function laadContext(db: Db, boekjaarId: string): Promise<Ctx> {
 
   const { data: kosten } = await db
     .from("kosten")
-    .select("bedrag, verdeling")
+    .select("bedrag, verdeling, categorie")
     .eq("boekjaar_id", boekjaarId)
     .eq("status", "bevestigd");
-  // Alles wat 'gelijk over de huurders' verdeeld wordt (elektriciteit, schoonmaak,
-  // materiaal, bankkosten, en negatieve posten zoals de watergroep-terugbetaling).
-  const totaalGedeeld = (kosten ?? [])
-    .filter((k: { verdeling: string }) => k.verdeling === "gelijk_huurders")
-    .reduce((s: number, k: { bedrag: number }) => s + Number(k.bedrag), 0);
+  // 'Gelijk over de huurders', per categorie (elektriciteit, schoonmaak, diverse,
+  // incl. negatieve posten zoals de watergroep-terugbetaling).
+  const perCategorie = new Map<string, number>();
+  for (const k of (kosten ?? []) as {
+    bedrag: number;
+    verdeling: string;
+    categorie: string;
+  }[]) {
+    if (k.verdeling !== "gelijk_huurders") continue;
+    perCategorie.set(
+      k.categorie,
+      (perCategorie.get(k.categorie) ?? 0) + Number(k.bedrag),
+    );
+  }
 
   return {
     boekjaar: bj,
     aantalKavels,
     prijs,
-    gedeeldPerApp: totaalGedeeld / aantalKavels,
+    gedeeldPerCategorie: perCategorie,
   };
 }
 
@@ -223,7 +232,6 @@ async function berekenVoorHuurder(
       warm.delta * ctx.prijs.warmwater_liter_per_m3,
   );
   const stookolieKost = round2(stookolieLiter * ctx.prijs.mazoutprijs_per_liter);
-  const gedeeldAandeel = round2(ctx.gedeeldPerApp * proRata);
 
   const lijnen: AfrekeningLijnInput[] = [
     {
@@ -250,15 +258,23 @@ async function berekenVoorHuurder(
       eenheidsprijs: ctx.prijs.mazoutprijs_per_liter,
       bedrag: stookolieKost,
     },
-    {
+  ];
+
+  // gedeelde kosten: per categorie, elk gelijk over de kavels en pro rata dagen
+  let gedeeldAandeel = 0;
+  for (const [categorie, totaal] of [...ctx.gedeeldPerCategorie].sort()) {
+    const aandeel = round2((totaal / ctx.aantalKavels) * proRata);
+    gedeeldAandeel += aandeel;
+    lijnen.push({
       soort: "gedeeld",
-      omschrijving: `Aandeel gedeelde kosten (${dagen}/${boekjaarDagen} dagen)`,
+      omschrijving: `${categorie} (aandeel ${dagen}/${boekjaarDagen} dagen)`,
       hoeveelheid: round2(proRata * 100),
       eenheid: "%",
-      eenheidsprijs: round2(ctx.gedeeldPerApp),
-      bedrag: gedeeldAandeel,
-    },
-  ];
+      eenheidsprijs: round2(totaal / ctx.aantalKavels),
+      bedrag: aandeel,
+    });
+  }
+  gedeeldAandeel = round2(gedeeldAandeel);
 
   const totaalKosten = round2(
     koudKost + warmKost + stookolieKost + gedeeldAandeel,
