@@ -36,8 +36,14 @@ export async function GET(request: Request) {
   }
 
   if (tokenHash && type) {
+    // De /verify (token_hash) route van GoTrue aanvaardt 'email' i.p.v.
+    // 'magiclink'/'signup'. Normaliseer zodat beide soorten links werken.
+    const otpType =
+      type === "recovery" || type === "invite" || type === "email_change"
+        ? type
+        : "email";
     const { error } = await supabase.auth.verifyOtp({
-      type: type as "email" | "magiclink" | "recovery" | "invite",
+      type: otpType,
       token_hash: tokenHash,
     });
     if (!error) return NextResponse.redirect(`${origin}${next}`);

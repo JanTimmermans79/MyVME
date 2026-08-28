@@ -67,7 +67,8 @@ if (error) {
 }
 
 const hashed = data.properties.hashed_token;
-const loginUrl = `${siteUrl}/auth/callback?token_hash=${hashed}&type=magiclink`;
+// token_hash-verificatie via GoTrue verwacht type=email (niet 'magiclink')
+const loginUrl = `${siteUrl}/auth/callback?token_hash=${hashed}&type=email`;
 
 console.log("\nAanmeld-URL (plak in je browser):\n");
 console.log(loginUrl);
