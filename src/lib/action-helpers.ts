@@ -1,7 +1,8 @@
 import "server-only";
 
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { type ActionState, IDLE } from "@/lib/action-state";
 
 export { type ActionState, IDLE };
@@ -24,6 +25,32 @@ export async function runAdmin(
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Onbekende fout.";
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * Voert `fn` uit als de ingelogde gebruiker (anon key + sessie => RLS actief).
+ * Voor acties die een eigenaar op zijn eigen data mag uitvoeren.
+ */
+export async function runUser(
+  fn: (
+    db: Awaited<ReturnType<typeof createClient>>,
+    userId: string,
+  ) => Promise<ActionState>,
+): Promise<ActionState> {
+  let userId: string;
+  try {
+    const session = await requireUser();
+    userId = session.userId;
+  } catch {
+    return { ok: false, error: "Niet ingelogd." };
+  }
+  try {
+    const db = await createClient();
+    return await fn(db, userId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Onbekende fout.";
     return { ok: false, error: message };
   }
 }

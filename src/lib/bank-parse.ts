@@ -112,8 +112,8 @@ export function parseDatum(raw: string): string | null {
   }
   const dmy = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
   if (dmy) {
-    let [, d, m, y] = dmy;
-    if (y.length === 2) y = `20${y}`;
+    const [, d, m, yRaw] = dmy;
+    const y = yRaw.length === 2 ? `20${yRaw}` : yRaw;
     return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
   }
   // Excel-serienummer
