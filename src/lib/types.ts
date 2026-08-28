@@ -61,10 +61,25 @@ export interface Eigenaar {
   auth_user_id: string;
   unit_id: string;
   naam: string;
+  voornaam: string | null;
   email: string | null;
   telefoon: string | null;
   iban: string | null;
   structuurcode_prefix: string | null;
+  created_at: string;
+}
+
+export type BankrelatieType = "leverancier" | "eigen_rekening" | "overig";
+
+export interface Bankrelatie {
+  id: string;
+  vme_id: string;
+  naam: string;
+  iban: string;
+  type: BankrelatieType;
+  standaard_categorie: string | null;
+  standaard_verdeelsleutel_id: string | null;
+  standaard_betaler_type: BetalerType | null;
   created_at: string;
 }
 
@@ -148,12 +163,19 @@ export interface Transactie {
   created_at: string;
 }
 
-export interface Voorschot {
+export interface VoorschotEigenaar {
   id: string;
   unit_id: string;
-  betaler_type: BetalerType;
+  boekjaar_id: string;
   bedrag_per_maand: number;
-  ingang_datum: string;
+  created_at: string;
+}
+
+export interface VoorschotHuurder {
+  id: string;
+  huurder_id: string;
+  boekjaar_id: string;
+  bedrag_per_maand: number;
   created_at: string;
 }
 
@@ -171,12 +193,3 @@ export interface Afrekening {
   updated_at: string;
 }
 
-export interface UnitSaldo {
-  unit_id: string;
-  vme_id: string;
-  unit_naam: string;
-  betaler_type: BetalerType;
-  verschuldigd: number;
-  ontvangen: number;
-  saldo: number;
-}

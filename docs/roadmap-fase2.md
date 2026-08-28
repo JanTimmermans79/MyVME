@@ -46,29 +46,45 @@ bankimport, en slimme IBAN-matching van betalingen.
 
 ## Rekenlogica (huurder, periode = `[max(boekjaarstart, huurdatum) → min(boekjaareinde, vertrekdatum)]`)
 
+Alle tellers in **m³**. Instelbaar per VME + boekjaar (met defaults):
+
+| Parameter | Default | Bron |
+|---|---|---|
+| `prijs_water_per_m3` | 6,51 €/m³ | vast ingeven (Watergroep) — geldt voor koud én warm |
+| `mazoutprijs_per_liter` | 0,81 €/l | vast ingeven **of** knop "bereken uit leveringen dit boekjaar" (gewogen gemiddelde van `mazout_levering`) |
+| `cv_liter_per_m3` | 0,20 l/m³ | omzetting CV-teller → stookolie |
+| `warmwater_liter_per_m3` | 1,00 l/m³ | omzetting warm water → stookolie |
+
 | Post | Formule |
 |---|---|
-| Koud water | Δ m³ × prijs koud water |
-| Warm water | Δ m³ × prijs warm water |
-| Stookolie | (Δ CV-teller + Δ warm water m³) × prijs stookolie |
-| Gedeelde kosten | som uit bankimport × aandeel verdeelsleutel, **pro rata bewoningsdagen** |
-| Voorschotten | som gematchte betalingen van de huurder in de periode |
-| **Saldo** | voorschotten − (individueel verbruik + aandeel gedeelde kosten) |
+| Koud water | Δ m³ × `prijs_water_per_m3` |
+| Warm water | Δ m³ × `prijs_water_per_m3` |
+| Stookolie (liter) | Δ CV m³ × `cv_liter_per_m3` + Δ warm water m³ × `warmwater_liter_per_m3` |
+| Stookolie (€) | liter × `mazoutprijs_per_liter` |
+| Gedeelde kosten | (Σ gedeelde kosten uit bankimport ÷ `vme.aantal_kavels`) × (bewoningsdagen ÷ dagen in boekjaar) |
+| Voorschotten (verwacht) | `voorschot_huurder.bedrag_per_maand` × maanden in periode |
+| Voorschotten (ontvangen) | Σ gematchte betalingen van de huurder in de periode |
+| **Saldo** | ontvangen − (koud + warm + stookolie + aandeel gedeelde kosten) |
+
+Als `|ontvangen − verwacht| > drempel` → **rode waarschuwing** in het overzicht.
 
 Meterstand-begin = stand einde vorig boekjaar, **tenzij** huurderwissel → stand bij
-afrekening vorige huurder.
+afrekening vorige huurder (`meterstand.aanleiding = 'huurderwissel'`).
+
+Gedeelde kosten (volledig naar huurders): elektriciteit, schoonmaak, water
+onderhoud, diverse — opgeteld uit de bankimport per categorie.
 
 ---
 
-## Open beslissingen (nodig vóór blok 2d/2e)
+## Beslissingen (BEVESTIGD 2026-08-28)
 
-1. Prijs stookolie/water: vast per boekjaar ingegeven **of** berekend (totale kost ÷ totaal verbruik)? Koud- en warmwaterprijs gelijk of apart?
-2. Eenheid van de CV-teller (m³ / kWh / liter / tik)?
-3. Gedeelde kosten: volledig naar huurders, of split eigenaar/huurder per categorie?
-4. Welke verdeelsleutel voor de gedeelde kosten (gelijk per app. of quotiteiten)?
-5. Voorschot-config automatisch uit de import afleiden, of blijft config handmatig en dient de import enkel om te matchen?
-6. Naam/voornaam splitsen ook bij de eigenaar? → **voorlopige keuze: enkel huurder** (eigenaar houdt `naam`)
-7. Eén betaling ↔ één factuur, of kan één overschrijving meerdere facturen dekken?
+1. **Vast ingeven per boekjaar.** Water 6,51 €/m³ (koud = warm). Mazout 0,81 €/l default, instelbaar of af te leiden uit de leveringen.
+2. **CV-teller in m³.** 1 m³ CV = 0,20 l stookolie; 1 m³ warm water = 1 l stookolie (beide instelbaar).
+3. **Gedeelde kosten volledig naar de huurders.**
+4. **Gelijk per appartement** (totaal ÷ `vme.aantal_kavels`), daarna pro rata bewoningsdagen.
+5. **Voorschot-config handmatig**, import dient ter controle; afwijking = rode melding.
+6. **Naam + voornaam ook bij de eigenaar.**
+7. **1 betaling ↔ 1 factuur** (`kosten.betaald_met_transactie_id`).
 
 ---
 

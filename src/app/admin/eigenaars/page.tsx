@@ -87,7 +87,9 @@ export default async function EigenaarsPage() {
               <TableBody>
                 {eigenaars.map((e) => (
                   <TableRow key={e.id}>
-                    <TableCell className="font-medium">{e.naam}</TableCell>
+                    <TableCell className="font-medium">
+                      {[e.voornaam, e.naam].filter(Boolean).join(" ")}
+                    </TableCell>
                     <TableCell>{unitById.get(e.unit_id)?.naam ?? "—"}</TableCell>
                     <TableCell>{e.email ?? "—"}</TableCell>
                     <TableCell>{e.telefoon ?? "—"}</TableCell>

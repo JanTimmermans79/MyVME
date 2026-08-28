@@ -65,6 +65,7 @@ export async function createEigenaar(
       unit_id,
       naam,
       email,
+      voornaam: optStr(formData, "voornaam"),
       telefoon: optStr(formData, "telefoon"),
       iban: optStr(formData, "iban"),
       structuurcode_prefix: optStr(formData, "structuurcode_prefix"),
@@ -97,6 +98,7 @@ export async function updateEigenaar(
       .from("eigenaar")
       .update({
         naam,
+        voornaam: optStr(formData, "voornaam"),
         email: optStr(formData, "email"),
         telefoon: optStr(formData, "telefoon"),
         iban: optStr(formData, "iban"),

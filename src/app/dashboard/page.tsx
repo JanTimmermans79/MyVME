@@ -17,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Afrekening, Eigenaar, Unit, UnitSaldo } from "@/lib/types";
+import type { Afrekening, Eigenaar, Transactie, Unit } from "@/lib/types";
 
 export const metadata = { title: "Mijn overzicht" };
 
@@ -36,10 +36,12 @@ export default async function DashboardPage() {
     .select("*")
     .returns<Unit[]>();
 
-  const { data: saldos } = await supabase
-    .from("unit_saldo")
+  const jaarStart = `${new Date().getFullYear()}-01-01`;
+  const { data: transacties } = await supabase
+    .from("transactie")
     .select("*")
-    .returns<UnitSaldo[]>();
+    .gte("datum", jaarStart)
+    .returns<Transactie[]>();
 
   const { data: afrekeningen } = await supabase
     .from("afrekening")
@@ -67,9 +69,15 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       {eigenaars.map((eig) => {
         const unit = unitById.get(eig.unit_id);
-        const unitSaldos = (saldos ?? []).filter(
-          (s) => s.unit_id === eig.unit_id,
+        const unitTx = (transacties ?? []).filter(
+          (t) => t.gematchte_unit_id === eig.unit_id,
         );
+        const perBetaler = (["eigenaar", "huurder"] as const).map((bt) => ({
+          betaler_type: bt,
+          totaal: unitTx
+            .filter((t) => t.betaler_type === bt)
+            .reduce((s, t) => s + Number(t.bedrag), 0),
+        }));
         const unitAfrekeningen = (afrekeningen ?? []).filter(
           (a) => a.unit_id === eig.unit_id,
         );
@@ -78,32 +86,27 @@ export default async function DashboardPage() {
           <Card key={eig.id}>
             <CardHeader>
               <CardTitle>{unit?.naam ?? "Unit"}</CardTitle>
-              <CardDescription>Eigenaar: {eig.naam}</CardDescription>
+              <CardDescription>
+                Eigenaar: {[eig.voornaam, eig.naam].filter(Boolean).join(" ")}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <section>
-                <h3 className="mb-2 text-sm font-medium">Lopend saldo</h3>
+                <h3 className="mb-2 text-sm font-medium">
+                  Betalingen dit kalenderjaar
+                </h3>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {unitSaldos.map((s) => {
-                    const r = saldoRichting(s.saldo);
-                    return (
-                      <div
-                        key={s.betaler_type}
-                        className="rounded-lg border p-3"
-                      >
-                        <p className="text-xs uppercase text-muted-foreground">
-                          {s.betaler_type}
-                        </p>
-                        <p className="text-lg font-semibold">
-                          {euro(s.saldo)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {r.label} · betaald {euro(s.ontvangen)} van{" "}
-                          {euro(s.verschuldigd)}
-                        </p>
-                      </div>
-                    );
-                  })}
+                  {perBetaler.map((s) => (
+                    <div key={s.betaler_type} className="rounded-lg border p-3">
+                      <p className="text-xs uppercase text-muted-foreground">
+                        {s.betaler_type}
+                      </p>
+                      <p className="text-lg font-semibold">{euro(s.totaal)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        totaal ontvangen en gematcht
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </section>
 

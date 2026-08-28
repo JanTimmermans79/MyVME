@@ -52,6 +52,7 @@ export function CreateEigenaarForm({ units }: { units: Unit[] }) {
           </SelectContent>
         </Select>
       </div>
+      <Field label="Voornaam" name="voornaam" />
       <Field label="Naam" name="naam" required />
       <Field label="E-mail" name="email" type="email" required />
       <Field label="Telefoon" name="telefoon" />
@@ -93,6 +94,11 @@ export function EditEigenaarDialog({ eigenaar }: { eigenaar: Eigenaar }) {
           onSuccess={() => setOpen(false)}
           className="space-y-3"
         >
+          <Field
+            label="Voornaam"
+            name="voornaam"
+            defaultValue={eigenaar.voornaam ?? ""}
+          />
           <Field label="Naam" name="naam" required defaultValue={eigenaar.naam} />
           <Field
             label="E-mail"

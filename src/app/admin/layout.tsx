@@ -16,6 +16,7 @@ const NAV: NavItem[] = [
   { href: "/admin/mazout", label: "Mazout" },
   { href: "/admin/voorschotten", label: "Voorschotten" },
   { href: "/admin/bank", label: "Bankimport" },
+  { href: "/admin/bankrelaties", label: "Bankrelaties" },
   { href: "/admin/afrekeningen", label: "Afrekeningen" },
 ];
 

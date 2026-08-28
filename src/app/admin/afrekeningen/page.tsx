@@ -112,7 +112,14 @@ export default async function AfrekeningenPage({
           verschuldigd: Number(a.verschuldigd),
           ontvangen: Number(a.ontvangen),
           saldo: Number(a.saldo),
-          ontvanger_naam: ontvanger?.naam ?? "onbekend",
+          ontvanger_naam: ontvanger
+            ? [
+                (ontvanger as { voornaam?: string | null }).voornaam,
+                ontvanger.naam,
+              ]
+                .filter(Boolean)
+                .join(" ")
+            : "onbekend",
           ontvanger_email: ontvanger?.email ?? null,
           mail_verzonden_op: a.mail_verzonden_op,
           mail_status: a.mail_status,
