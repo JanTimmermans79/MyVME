@@ -25,6 +25,7 @@ import type { Eigenaar, Huurder, Transactie, Unit } from "@/lib/types";
 import { suggestie, type Kandidaat } from "@/lib/bank-matching";
 import { BankImporter } from "./bank-importer";
 import { AssignRow } from "./assign-row";
+import { SoortSelect } from "./soort-select";
 import {
   assignTransactie,
   ontkoppelTransactie,
@@ -80,9 +81,22 @@ export default async function BankPage() {
   ];
 
   const unitNaam = new Map((units ?? []).map((u) => [u.id, u.naam]));
-  const teControleren = (transacties ?? []).filter(
+  const onbevestigd = (transacties ?? []).filter(
     (t) => t.match_type === "onbevestigd" || t.match_type === null,
   );
+  // Kosten / interne overboekingen / rente / vorig-jaar-afrekeningen hoeven niet
+  // aan een unit gekoppeld te worden -> apart tonen, niet als "te controleren".
+  const GEEN_MATCH_NODIG = new Set([
+    "kost",
+    "interne_overboeking",
+    "rente",
+    "afrekening",
+    "kapitaalsoproep",
+  ]);
+  const teControleren = onbevestigd.filter(
+    (t) => !GEEN_MATCH_NODIG.has(t.soort),
+  );
+  const verwerkt = onbevestigd.filter((t) => GEEN_MATCH_NODIG.has(t.soort));
   const toegewezen = (transacties ?? []).filter(
     (t) => t.match_type === "automatisch" || t.match_type === "manueel",
   );
@@ -131,19 +145,19 @@ export default async function BankPage() {
                       {t.mededeling}
                     </p>
                   )}
-                  <p className="mt-1 text-xs">
-                    <Badge variant="outline">{t.soort}</Badge>{" "}
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                    <SoortSelect id={t.id} waarde={t.soort} />
                     {t.rekening && (
                       <span className="text-muted-foreground">
                         {t.rekening}rekening
                       </span>
                     )}
                     {t.tegenpartij_iban && (
-                      <span className="ml-2 font-mono text-muted-foreground">
+                      <span className="font-mono text-muted-foreground">
                         {t.tegenpartij_iban}
                       </span>
                     )}
-                  </p>
+                  </div>
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     {sug && (
                       <ActionForm
@@ -171,6 +185,48 @@ export default async function BankPage() {
           )}
         </CardContent>
       </Card>
+
+      {verwerkt.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Kosten & overboekingen ({verwerkt.length})</CardTitle>
+            <CardDescription>
+              Deze hoeven niet aan een unit gekoppeld te worden. Kosten worden
+              via <strong>Kosten → “Genereer uit bank”</strong> geboekt (of ze
+              zitten al in een geaggregeerde kost). Klopt de soort niet? Pas ze
+              hier aan.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Datum</TableHead>
+                  <TableHead className="text-right">Bedrag</TableHead>
+                  <TableHead>Tegenpartij</TableHead>
+                  <TableHead>Mededeling</TableHead>
+                  <TableHead>Soort</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {verwerkt.map((t) => (
+                  <TableRow key={t.id}>
+                    <TableCell>{datum(t.datum)}</TableCell>
+                    <TableCell className="text-right">{euro(t.bedrag)}</TableCell>
+                    <TableCell>{t.tegenpartij_naam ?? "—"}</TableCell>
+                    <TableCell className="max-w-xs truncate text-xs">
+                      {t.mededeling ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <SoortSelect id={t.id} waarde={t.soort} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
