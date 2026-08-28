@@ -1,15 +1,15 @@
 /**
  * Gecentraliseerde toegang tot environment-variabelen.
- * Client-variabelen (NEXT_PUBLIC_*) worden bij build inlined; server-variabelen
- * zijn enkel beschikbaar in server-code.
  *
- * De accessors gooien pas een fout wanneer een ontbrekende waarde écht nodig is
- * (bij het aanmaken van een client), niet bij het laden van de module — zo blijft
- * `next build` werken in omgevingen waar de secrets nog niet gezet zijn.
+ * BELANGRIJK: Next.js vervangt `process.env.NEXT_PUBLIC_*` in de browser-bundle
+ * enkel bij *directe* member-access (niet via `process.env[naam]`). Daarom staat
+ * elke NEXT_PUBLIC_-variabele hieronder letterlijk uitgeschreven.
+ *
+ * De accessors gooien pas een fout wanneer een ontbrekende waarde écht nodig is,
+ * niet bij het laden van de module — zo blijft `next build` werken.
  */
 
-function need(name: string): string {
-  const value = process.env[name];
+function ensure(name: string, value: string | undefined): string {
   if (!value) {
     throw new Error(
       `Ontbrekende environment-variabele: ${name}. Zie .env.example.`,
@@ -20,10 +20,16 @@ function need(name: string): string {
 
 export const clientEnv = {
   get supabaseUrl() {
-    return need("NEXT_PUBLIC_SUPABASE_URL");
+    return ensure(
+      "NEXT_PUBLIC_SUPABASE_URL",
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+    );
   },
   get supabaseAnonKey() {
-    return need("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+    return ensure(
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    );
   },
   get siteUrl() {
     return (
@@ -48,10 +54,16 @@ export const emailjsEnv = {
   },
 };
 
-/** Alleen aanroepen vanuit server-code. */
+/** Alleen aanroepen vanuit server-code (service_role key is server-only). */
 export function serverEnv() {
   return {
-    supabaseUrl: need("NEXT_PUBLIC_SUPABASE_URL"),
-    serviceRoleKey: need("SUPABASE_SERVICE_ROLE_KEY"),
+    supabaseUrl: ensure(
+      "NEXT_PUBLIC_SUPABASE_URL",
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+    ),
+    serviceRoleKey: ensure(
+      "SUPABASE_SERVICE_ROLE_KEY",
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+    ),
   };
 }

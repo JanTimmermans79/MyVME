@@ -31,19 +31,26 @@ export function LoginForm() {
     setStatus("sending");
     setMessage(null);
 
-    const supabase = createClient();
-    const redirectTo = `${clientEnv.siteUrl}/auth/callback?next=${encodeURIComponent(next)}`;
+    try {
+      const supabase = createClient();
+      const redirectTo = `${clientEnv.siteUrl}/auth/callback?next=${encodeURIComponent(next)}`;
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { emailRedirectTo: redirectTo },
-    });
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: { emailRedirectTo: redirectTo },
+      });
 
-    if (error) {
+      if (error) {
+        setStatus("error");
+        setMessage(error.message);
+      } else {
+        setStatus("sent");
+      }
+    } catch (err) {
       setStatus("error");
-      setMessage(error.message);
-    } else {
-      setStatus("sent");
+      setMessage(
+        err instanceof Error ? err.message : "Aanmelden mislukte.",
+      );
     }
   }
 
