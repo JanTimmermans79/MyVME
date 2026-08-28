@@ -1,0 +1,32 @@
+# Minimale Supabase CLI-config. Vul project_id met je Supabase project-ref
+# (Dashboard > Project Settings > General > Reference ID) en draai:
+#   supabase link --project-ref <ref>
+#   supabase db push
+#
+# Voor lokaal testen (RLS-tests): supabase start && supabase test db
+
+project_id = "myvme"
+
+[db]
+port = 54322
+major_version = 15
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/**"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[studio]
+enabled = true
+port = 54323
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
