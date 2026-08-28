@@ -1,51 +1,63 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
-import { getActiveVme } from "@/lib/vme-context";
-import { AppShell, type NavItem } from "@/components/app-shell";
-import { VmeSwitcher } from "@/components/vme-switcher";
+import { getActiveContext } from "@/lib/vme-context";
+import { AppShell, type NavGroup } from "@/components/app-shell";
+import { ContextBar } from "@/components/context-bar";
 
-const NAV: NavItem[] = [
-  { href: "/admin", label: "Overzicht" },
-  { href: "/admin/vme", label: "VME's" },
-  { href: "/admin/boekjaren", label: "Boekjaren" },
-  { href: "/admin/units", label: "Units" },
-  { href: "/admin/verdeelsleutels", label: "Verdeelsleutels" },
-  { href: "/admin/eigenaars", label: "Eigenaars" },
-  { href: "/admin/huurders", label: "Huurders" },
-  { href: "/admin/kosten", label: "Kosten" },
-  { href: "/admin/mazout", label: "Mazout" },
-  { href: "/admin/tellers", label: "Tellers" },
-  { href: "/admin/voorschotten", label: "Voorschotten" },
-  { href: "/admin/bank", label: "Bankimport" },
-  { href: "/admin/bankrelaties", label: "Bankrelaties" },
-  { href: "/admin/afrekeningen", label: "Afrekeningen" },
+const NAV: NavGroup[] = [
+  { items: [{ href: "/admin", label: "Overzicht" }] },
+  {
+    label: "VME",
+    items: [
+      { href: "/admin/vme", label: "VME's" },
+      { href: "/admin/units", label: "Wooneenheden" },
+      { href: "/admin/eigenaars", label: "Eigenaars" },
+      { href: "/admin/huurders", label: "Huurders" },
+      { href: "/admin/verdeelsleutels", label: "Verdeelsleutels" },
+      { href: "/admin/bankrelaties", label: "Bankrelaties" },
+    ],
+  },
+  {
+    label: "Boekjaar",
+    items: [
+      { href: "/admin/voorschotten", label: "Voorschotten" },
+      { href: "/admin/kosten", label: "Kosten" },
+      { href: "/admin/tellers", label: "Meterstanden" },
+      { href: "/admin/mazout", label: "Mazout" },
+      { href: "/admin/bank", label: "Bankimport" },
+      { href: "/admin/afrekeningen", label: "Afrekeningen" },
+    ],
+  },
 ];
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const session = await requireAdmin();
-  const { vmes, active } = await getActiveVme();
+  const ctx = await getActiveContext();
 
   return (
     <AppShell
       title="MyVME · Syndicus"
       nav={NAV}
       userLabel={session.email ?? "Syndicus"}
-    >
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div className="text-sm text-muted-foreground">
-          Actieve VME:{" "}
-          {active ? (
-            <span className="font-medium text-foreground">{active.naam}</span>
-          ) : (
+      contextBar={
+        ctx.vme ? (
+          <ContextBar
+            vmes={ctx.vmes}
+            vme={ctx.vme}
+            boekjaren={ctx.boekjaren}
+            boekjaar={ctx.boekjaar}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Nog geen VME.{" "}
             <Link href="/admin/vme" className="font-medium underline">
-              Maak eerst een VME aan
+              Maak er eerst een aan
             </Link>
-          )}
-        </div>
-        {vmes.length > 1 && active && (
-          <VmeSwitcher vmes={vmes} activeId={active.id} />
-        )}
-      </div>
+            .
+          </p>
+        )
+      }
+    >
       {children}
     </AppShell>
   );

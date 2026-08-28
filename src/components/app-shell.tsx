@@ -7,39 +7,58 @@ export interface NavItem {
   label: string;
 }
 
+export interface NavGroup {
+  label?: string;
+  items: NavItem[];
+}
+
 export function AppShell({
   title,
   nav,
   userLabel,
+  contextBar,
   children,
 }: {
   title: string;
-  nav: NavItem[];
+  nav: NavGroup[];
   userLabel: string;
+  contextBar?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="min-h-dvh">
       <header className="border-b bg-card">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-          <Link href="/" className="font-semibold">
-            {title}
-          </Link>
-          <nav className="flex flex-wrap gap-1 text-sm">
-            {nav.map((item) => (
-              <NavLink key={item.href} href={item.href}>
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <span className="text-muted-foreground">{userLabel}</span>
-            <form action="/auth/signout" method="post">
-              <Button type="submit" variant="outline" size="sm">
-                Afmelden
-              </Button>
-            </form>
+        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <Link href="/" className="font-semibold">
+              {title}
+            </Link>
+            <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              {nav.map((group, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-1">
+                  {group.label && (
+                    <span className="mr-0.5 text-[0.65rem] font-semibold tracking-wide text-muted-foreground/70 uppercase">
+                      {group.label}
+                    </span>
+                  )}
+                  {group.items.map((item) => (
+                    <NavLink key={item.href} href={item.href}>
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </div>
+              ))}
+            </nav>
+            <div className="ml-auto flex items-center gap-3 text-sm">
+              <span className="text-muted-foreground">{userLabel}</span>
+              <form action="/auth/signout" method="post">
+                <Button type="submit" variant="outline" size="sm">
+                  Afmelden
+                </Button>
+              </form>
+            </div>
           </div>
+          {contextBar}
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>

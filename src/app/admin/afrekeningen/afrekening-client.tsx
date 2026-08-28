@@ -13,13 +13,6 @@ import { recordMail } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -41,32 +34,6 @@ export interface AfrekeningRij {
   mail_status: string | null;
 }
 
-export function BoekjaarKiezer({
-  boekjaren,
-  actief,
-}: {
-  boekjaren: { id: string; label: string }[];
-  actief: string;
-}) {
-  const router = useRouter();
-  return (
-    <Select
-      value={actief}
-      onValueChange={(v) => router.push(`/admin/afrekeningen?boekjaar=${v}`)}
-    >
-      <SelectTrigger className="min-w-[16rem]">
-        <SelectValue placeholder="Kies boekjaar" />
-      </SelectTrigger>
-      <SelectContent>
-        {boekjaren.map((b) => (
-          <SelectItem key={b.id} value={b.id}>
-            {b.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
 
 export function AfrekeningTabel({
   rijen,

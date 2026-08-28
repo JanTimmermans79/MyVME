@@ -1,8 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
-import { getActiveVme } from "@/lib/vme-context";
+import { getActiveContext } from "@/lib/vme-context";
 import { datum } from "@/lib/format";
-import { NoVme } from "@/components/no-vme";
-import { BoekjaarKiezer } from "@/components/boekjaar-kiezer";
+import { NoBoekjaar } from "@/components/no-boekjaar";
 import {
   Card,
   CardContent,
@@ -35,30 +34,11 @@ function overlapt(h: Huurder, b: Boekjaar): boolean {
   return start <= b.eind_datum && eind >= b.start_datum;
 }
 
-export default async function VoorschottenPage({
-  searchParams,
-}: PageProps<"/admin/voorschotten">) {
-  const { active } = await getActiveVme();
-  if (!active) return <NoVme />;
+export default async function VoorschottenPage() {
+  const { vme: active, boekjaar } = await getActiveContext();
+  if (!active || !boekjaar) return <NoBoekjaar />;
 
-  const sp = await searchParams;
   const supabase = await createClient();
-
-  const { data: boekjaren } = await supabase
-    .from("boekjaar")
-    .select("*")
-    .eq("vme_id", active.id)
-    .order("start_datum", { ascending: false })
-    .returns<Boekjaar[]>();
-
-  const opts = (boekjaren ?? []).map((b) => ({
-    id: b.id,
-    label: `${datum(b.start_datum)} – ${datum(b.eind_datum)}`,
-  }));
-  const gekozenId =
-    (typeof sp.boekjaar === "string" ? sp.boekjaar : undefined) ??
-    boekjaren?.[0]?.id;
-  const boekjaar = (boekjaren ?? []).find((b) => b.id === gekozenId);
 
   const { data: units } = await supabase
     .from("unit")
@@ -76,20 +56,18 @@ export default async function VoorschottenPage({
         .returns<Huurder[]>()
     : { data: [] as Huurder[] };
 
-  const [{ data: vse }, { data: vsh }] = boekjaar
-    ? await Promise.all([
-        supabase
-          .from("voorschot_eigenaar")
-          .select("*")
-          .eq("boekjaar_id", boekjaar.id)
-          .returns<VoorschotEigenaar[]>(),
-        supabase
-          .from("voorschot_huurder")
-          .select("*")
-          .eq("boekjaar_id", boekjaar.id)
-          .returns<VoorschotHuurder[]>(),
-      ])
-    : [{ data: [] as VoorschotEigenaar[] }, { data: [] as VoorschotHuurder[] }];
+  const [{ data: vse }, { data: vsh }] = await Promise.all([
+    supabase
+      .from("voorschot_eigenaar")
+      .select("*")
+      .eq("boekjaar_id", boekjaar.id)
+      .returns<VoorschotEigenaar[]>(),
+    supabase
+      .from("voorschot_huurder")
+      .select("*")
+      .eq("boekjaar_id", boekjaar.id)
+      .returns<VoorschotHuurder[]>(),
+  ]);
 
   const vseByUnit = new Map((vse ?? []).map((v) => [v.unit_id, v.bedrag_per_maand]));
   const vshByHuurder = new Map(
@@ -99,32 +77,16 @@ export default async function VoorschottenPage({
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Voorschotten per boekjaar</CardTitle>
-          <CardDescription>
-            Eigenaars: bepaald op de algemene vergadering, per unit. Huurders:
-            variabel, per huurder.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {opts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Maak eerst een boekjaar aan.
-            </p>
-          ) : (
-            <BoekjaarKiezer
-              basePath="/admin/voorschotten"
-              boekjaren={opts}
-              actief={gekozenId ?? ""}
-            />
-          )}
-        </CardContent>
-      </Card>
+      <div>
+        <h1 className="text-lg font-semibold">Voorschotten</h1>
+        <p className="text-sm text-muted-foreground">
+          Boekjaar {datum(boekjaar.start_datum)} – {datum(boekjaar.eind_datum)}.
+          Eigenaars: reservefonds-provisie (AV), per unit. Huurders: variabel,
+          per huurder.
+        </p>
+      </div>
 
-      {boekjaar && (
-        <>
-          <Card>
+      <Card>
             <CardHeader>
               <CardTitle className="text-base">Eigenaars</CardTitle>
             </CardHeader>
@@ -207,8 +169,6 @@ export default async function VoorschottenPage({
               })()}
             </CardContent>
           </Card>
-        </>
-      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
-import { getActiveVme } from "@/lib/vme-context";
+import { getActiveContext } from "@/lib/vme-context";
 import { euro, datum } from "@/lib/format";
-import { NoVme } from "@/components/no-vme";
+import { NoBoekjaar } from "@/components/no-boekjaar";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/form";
 import { ConfirmSubmit } from "@/components/confirm-submit";
@@ -35,8 +35,8 @@ import {
 export const metadata = { title: "Bankimport" };
 
 export default async function BankPage() {
-  const { active } = await getActiveVme();
-  if (!active) return <NoVme />;
+  const { vme: active, boekjaar } = await getActiveContext();
+  if (!active || !boekjaar) return <NoBoekjaar />;
 
   const supabase = await createClient();
   const { data: units } = await supabase
@@ -114,7 +114,11 @@ export default async function BankPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <BankImporter vmeId={active.id} />
+          <BankImporter
+            vmeId={active.id}
+            boekjaarStart={boekjaar.start_datum}
+            boekjaarEind={boekjaar.eind_datum}
+          />
         </CardContent>
       </Card>
 

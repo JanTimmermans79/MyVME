@@ -89,7 +89,15 @@ function PreviewTabel({ rows }: { rows: ParsedTx[] }) {
   );
 }
 
-export function BankImporter({ vmeId }: { vmeId: string }) {
+export function BankImporter({
+  vmeId,
+  boekjaarStart,
+  boekjaarEind,
+}: {
+  vmeId: string;
+  boekjaarStart: string;
+  boekjaarEind: string;
+}) {
   const [pending, startTransition] = useTransition();
 
   // XLS
@@ -176,6 +184,17 @@ export function BankImporter({ vmeId }: { vmeId: string }) {
 
         {pdf && (
           <>
+            {pdf.periode_van &&
+              pdf.periode_tot &&
+              (pdf.periode_tot < boekjaarStart ||
+                pdf.periode_van > boekjaarEind) && (
+                <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                  ⚠ Dit uittreksel ({pdf.periode_van} → {pdf.periode_tot}) valt
+                  buiten het geselecteerde boekjaar ({boekjaarStart} →{" "}
+                  {boekjaarEind}). Kies bovenaan het juiste boekjaar of upload een
+                  ander bestand.
+                </p>
+              )}
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <Badge variant="secondary">
                 {pdf.rekening === "spaar"

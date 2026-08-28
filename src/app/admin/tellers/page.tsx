@@ -1,8 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
-import { getActiveVme } from "@/lib/vme-context";
+import { getActiveContext } from "@/lib/vme-context";
 import { datum } from "@/lib/format";
-import { NoVme } from "@/components/no-vme";
-import { BoekjaarKiezer } from "@/components/boekjaar-kiezer";
+import { NoBoekjaar } from "@/components/no-boekjaar";
 import { ActionForm } from "@/components/action-form";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import {
@@ -13,7 +12,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type {
-  Boekjaar,
   Eenheidsprijs,
   Huurder,
   Meterstand,
@@ -30,37 +28,19 @@ import {
 
 export const metadata = { title: "Tellers & verbruik" };
 
-export default async function TellersPage({
-  searchParams,
-}: PageProps<"/admin/tellers">) {
-  const { active } = await getActiveVme();
-  if (!active) return <NoVme />;
+export default async function TellersPage() {
+  const { vme: active, boekjaar } = await getActiveContext();
+  if (!active || !boekjaar) return <NoBoekjaar />;
+  const gekozenId = boekjaar.id;
 
-  const sp = await searchParams;
   const supabase = await createClient();
 
-  const { data: boekjaren } = await supabase
-    .from("boekjaar")
+  const { data: prijs } = await supabase
+    .from("eenheidsprijs")
     .select("*")
     .eq("vme_id", active.id)
-    .order("start_datum", { ascending: false })
-    .returns<Boekjaar[]>();
-  const opts = (boekjaren ?? []).map((b) => ({
-    id: b.id,
-    label: `${datum(b.start_datum)} – ${datum(b.eind_datum)}`,
-  }));
-  const gekozenId =
-    (typeof sp.boekjaar === "string" ? sp.boekjaar : undefined) ??
-    boekjaren?.[0]?.id;
-
-  const { data: prijs } = gekozenId
-    ? await supabase
-        .from("eenheidsprijs")
-        .select("*")
-        .eq("vme_id", active.id)
-        .eq("boekjaar_id", gekozenId)
-        .maybeSingle<Eenheidsprijs>()
-    : { data: null };
+    .eq("boekjaar_id", gekozenId)
+    .maybeSingle<Eenheidsprijs>();
 
   const { data: units } = await supabase
     .from("unit")
@@ -119,26 +99,11 @@ export default async function TellersPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {opts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Maak eerst een boekjaar aan.
-            </p>
-          ) : (
-            <>
-              <BoekjaarKiezer
-                basePath="/admin/tellers"
-                boekjaren={opts}
-                actief={gekozenId ?? ""}
-              />
-              {gekozenId && (
-                <EenheidsprijsForm
-                  vmeId={active.id}
-                  boekjaarId={gekozenId}
-                  huidig={prijs ?? null}
-                />
-              )}
-            </>
-          )}
+          <EenheidsprijsForm
+            vmeId={active.id}
+            boekjaarId={gekozenId}
+            huidig={prijs ?? null}
+          />
         </CardContent>
       </Card>
 

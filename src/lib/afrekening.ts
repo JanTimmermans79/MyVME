@@ -101,7 +101,7 @@ export async function berekenAfrekening(
   const { data: transacties } = unitIds.length
     ? await db
         .from("transactie")
-        .select("bedrag, betaler_type, gematchte_unit_id, datum")
+        .select("bedrag, betaler_type, gematchte_unit_id, datum, soort, rekening")
         .in("gematchte_unit_id", unitIds)
         .gte("datum", boekjaar.start_datum)
         .lte("datum", boekjaar.eind_datum)
@@ -111,6 +111,8 @@ export async function berekenAfrekening(
     betaler_type: BetalerType | null;
     gematchte_unit_id: string | null;
     datum: string;
+    soort: string;
+    rekening: string | null;
   }[];
 
   let kostenZonderSleutel = 0;
@@ -141,10 +143,15 @@ export async function berekenAfrekening(
       verschuldigd += (Number(k.bedrag) * aandeel) / totaal;
     }
 
+    // "Ontvangen" = enkel operationele eigenaarsvoorschotten op de ZICHTrekening.
+    // Reservefonds-provisies (spaarrekening) en kapitaalsoproepen zijn een aparte
+    // stroom (zie voorschotcontrole) en horen niet in deze afrekening.
     let ontvangen = 0;
     for (const t of txList) {
       if (t.gematchte_unit_id !== unit.id) continue;
       if (t.betaler_type !== bt) continue;
+      if (t.soort !== "voorschot") continue;
+      if (t.rekening === "spaar") continue;
       ontvangen += Number(t.bedrag);
     }
 

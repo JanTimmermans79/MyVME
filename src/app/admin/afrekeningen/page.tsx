@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getActiveVme } from "@/lib/vme-context";
+import { getActiveContext } from "@/lib/vme-context";
 import { datum, euro, saldoRichting } from "@/lib/format";
-import { NoVme } from "@/components/no-vme";
-import { BoekjaarKiezer } from "@/components/boekjaar-kiezer";
+import { NoBoekjaar } from "@/components/no-boekjaar";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/form";
 import {
@@ -23,7 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Afrekening, Boekjaar, Eigenaar, Unit } from "@/lib/types";
+import type { Afrekening, Eigenaar, Unit } from "@/lib/types";
 import { berekenHuurderAfrekeningen } from "@/lib/huurder-afrekening";
 import { voorschotControle } from "@/lib/voorschot-controle";
 import { berekenEnBewaar } from "./actions";
@@ -31,32 +30,11 @@ import { AfrekeningTabel, type AfrekeningRij } from "./afrekening-client";
 
 export const metadata = { title: "Afrekeningen" };
 
-export default async function AfrekeningenPage({
-  searchParams,
-}: PageProps<"/admin/afrekeningen">) {
-  const { active } = await getActiveVme();
-  if (!active) return <NoVme />;
+export default async function AfrekeningenPage() {
+  const { vme: active, boekjaar } = await getActiveContext();
+  if (!active || !boekjaar) return <NoBoekjaar />;
 
-  const sp = await searchParams;
   const supabase = await createClient();
-
-  const { data: boekjaren } = await supabase
-    .from("boekjaar")
-    .select("*")
-    .eq("vme_id", active.id)
-    .order("start_datum", { ascending: false })
-    .returns<Boekjaar[]>();
-
-  const opts = (boekjaren ?? []).map((b) => ({
-    id: b.id,
-    label: `${datum(b.start_datum)} – ${datum(b.eind_datum)}${
-      b.status === "afgesloten" ? " (afgesloten)" : ""
-    }`,
-  }));
-  const gekozen =
-    (typeof sp.boekjaar === "string" ? sp.boekjaar : undefined) ??
-    boekjaren?.[0]?.id;
-  const boekjaar = (boekjaren ?? []).find((b) => b.id === gekozen);
 
   let eigenaarRijen: AfrekeningRij[] = [];
   let huurderResultaten: Awaited<
@@ -137,28 +115,19 @@ export default async function AfrekeningenPage({
             gedeelde kosten.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {opts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Maak eerst een boekjaar aan.
-            </p>
-          ) : (
-            <div className="flex flex-wrap items-center gap-3">
-              <BoekjaarKiezer
-                basePath="/admin/afrekeningen"
-                boekjaren={opts}
-                actief={gekozen ?? ""}
-              />
-              {boekjaar && (
-                <ActionForm
-                  action={berekenEnBewaar}
-                  hiddenFields={{ boekjaar_id: boekjaar.id }}
-                >
-                  <SubmitButton>Afrekeningen (her)berekenen</SubmitButton>
-                </ActionForm>
-              )}
-            </div>
-          )}
+        <CardContent>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground">
+              Boekjaar {datum(boekjaar.start_datum)} –{" "}
+              {datum(boekjaar.eind_datum)}
+            </span>
+            <ActionForm
+              action={berekenEnBewaar}
+              hiddenFields={{ boekjaar_id: boekjaar.id }}
+            >
+              <SubmitButton>Afrekeningen (her)berekenen</SubmitButton>
+            </ActionForm>
+          </div>
         </CardContent>
       </Card>
 

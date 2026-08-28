@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getActiveVme } from "@/lib/vme-context";
+import { getActiveContext } from "@/lib/vme-context";
 import { euro, datum } from "@/lib/format";
-import { NoVme } from "@/components/no-vme";
+import { NoBoekjaar } from "@/components/no-boekjaar";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/form";
 import { genereerKostenUitBank } from "./actions";
@@ -22,7 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Boekjaar, Kosten, Verdeelsleutel } from "@/lib/types";
+import type { Kosten, Verdeelsleutel } from "@/lib/types";
 import {
   CreateKostForm,
   ConfirmKostButton,
@@ -32,31 +32,25 @@ import {
 export const metadata = { title: "Kosten" };
 
 export default async function KostenPage() {
-  const { active } = await getActiveVme();
-  if (!active) return <NoVme />;
+  const { vme: active, boekjaar } = await getActiveContext();
+  if (!active || !boekjaar) return <NoBoekjaar />;
 
   const supabase = await createClient();
-  const [{ data: boekjaren }, { data: sleutels }, { data: kosten }] =
-    await Promise.all([
-      supabase
-        .from("boekjaar")
-        .select("*")
-        .eq("vme_id", active.id)
-        .order("start_datum", { ascending: false })
-        .returns<Boekjaar[]>(),
-      supabase
-        .from("verdeelsleutel")
-        .select("*")
-        .eq("vme_id", active.id)
-        .order("naam")
-        .returns<Verdeelsleutel[]>(),
-      supabase
-        .from("kosten")
-        .select("*")
-        .eq("vme_id", active.id)
-        .order("datum", { ascending: false })
-        .returns<Kosten[]>(),
-    ]);
+  const [{ data: sleutels }, { data: kosten }] = await Promise.all([
+    supabase
+      .from("verdeelsleutel")
+      .select("*")
+      .eq("vme_id", active.id)
+      .order("naam")
+      .returns<Verdeelsleutel[]>(),
+    supabase
+      .from("kosten")
+      .select("*")
+      .eq("boekjaar_id", boekjaar.id)
+      .order("datum", { ascending: false })
+      .returns<Kosten[]>(),
+  ]);
+  const boekjaren = [boekjaar];
 
   const sleutelById = new Map((sleutels ?? []).map((s) => [s.id, s.naam]));
 

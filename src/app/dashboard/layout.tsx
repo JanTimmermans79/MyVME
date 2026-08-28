@@ -1,9 +1,13 @@
 import { requireUser } from "@/lib/auth";
-import { AppShell, type NavItem } from "@/components/app-shell";
+import { AppShell, type NavGroup } from "@/components/app-shell";
 
-const NAV: NavItem[] = [
-  { href: "/dashboard", label: "Mijn overzicht" },
-  { href: "/dashboard/contact", label: "Contactgegevens" },
+const NAV: NavGroup[] = [
+  {
+    items: [
+      { href: "/dashboard", label: "Mijn overzicht" },
+      { href: "/dashboard/contact", label: "Contactgegevens" },
+    ],
+  },
 ];
 
 export default async function DashboardLayout({

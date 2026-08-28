@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
-import { getActiveVme } from "@/lib/vme-context";
+import { getActiveContext } from "@/lib/vme-context";
 import { euro, datum } from "@/lib/format";
-import { NoVme } from "@/components/no-vme";
+import { NoBoekjaar } from "@/components/no-boekjaar";
 import { ActionForm } from "@/components/action-form";
 import { Field, SubmitButton } from "@/components/form";
 import { ConfirmSubmit } from "@/components/confirm-submit";
@@ -26,14 +26,16 @@ import { createMazout, deleteMazout } from "./actions";
 export const metadata = { title: "Mazout" };
 
 export default async function MazoutPage() {
-  const { active } = await getActiveVme();
-  if (!active) return <NoVme />;
+  const { vme: active, boekjaar } = await getActiveContext();
+  if (!active || !boekjaar) return <NoBoekjaar />;
 
   const supabase = await createClient();
   const { data: leveringen } = await supabase
     .from("mazout_levering")
     .select("*")
     .eq("vme_id", active.id)
+    .gte("datum", boekjaar.start_datum)
+    .lte("datum", boekjaar.eind_datum)
     .order("datum", { ascending: false })
     .returns<MazoutLevering[]>();
 

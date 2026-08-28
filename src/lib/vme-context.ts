@@ -2,31 +2,60 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import type { Vme } from "@/lib/types";
+import type { Boekjaar, Vme } from "@/lib/types";
 
-const COOKIE = "myvme_active_vme";
+export const ACTIVE_VME_COOKIE = "myvme_active_vme";
+export const ACTIVE_BOEKJAAR_COOKIE = "myvme_active_boekjaar";
 
-export async function getVmes(): Promise<Vme[]> {
+export interface ActiveContext {
+  vmes: Vme[];
+  vme: Vme | null;
+  boekjaren: Boekjaar[];
+  boekjaar: Boekjaar | null;
+}
+
+/**
+ * De actieve werkcontext van de admin: één VME + één boekjaar.
+ * Alle boekjaar-gebonden schermen (kosten, voorschotten, meterstanden,
+ * bankimport, afrekeningen) werken automatisch in dit boekjaar.
+ */
+export async function getActiveContext(): Promise<ActiveContext> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const cookieStore = await cookies();
+
+  const { data: vmeData } = await supabase
     .from("vme")
     .select("*")
     .order("naam", { ascending: true });
-  return (data as Vme[] | null) ?? [];
+  const vmes = (vmeData as Vme[] | null) ?? [];
+  if (vmes.length === 0)
+    return { vmes, vme: null, boekjaren: [], boekjaar: null };
+
+  const wantedVme = cookieStore.get(ACTIVE_VME_COOKIE)?.value;
+  const vme = vmes.find((v) => v.id === wantedVme) ?? vmes[0];
+
+  const { data: bjData } = await supabase
+    .from("boekjaar")
+    .select("*")
+    .eq("vme_id", vme.id)
+    .order("start_datum", { ascending: false });
+  const boekjaren = (bjData as Boekjaar[] | null) ?? [];
+
+  const wantedBj = cookieStore.get(ACTIVE_BOEKJAAR_COOKIE)?.value;
+  const boekjaar =
+    boekjaren.find((b) => b.id === wantedBj) ??
+    boekjaren.find((b) => b.status === "open") ??
+    boekjaren[0] ??
+    null;
+
+  return { vmes, vme, boekjaren, boekjaar };
 }
 
-/** Actieve VME voor de admin. Cookie-keuze, met fallback op de eerste VME. */
+/** Compat: enkel de VME (voor schermen die geen boekjaar nodig hebben). */
 export async function getActiveVme(): Promise<{
   vmes: Vme[];
   active: Vme | null;
 }> {
-  const vmes = await getVmes();
-  if (vmes.length === 0) return { vmes, active: null };
-
-  const cookieStore = await cookies();
-  const wanted = cookieStore.get(COOKIE)?.value;
-  const active = vmes.find((v) => v.id === wanted) ?? vmes[0];
-  return { vmes, active };
+  const ctx = await getActiveContext();
+  return { vmes: ctx.vmes, active: ctx.vme };
 }
-
-export const ACTIVE_VME_COOKIE = COOKIE;
