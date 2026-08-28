@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  experimental: {
+    serverActions: {
+      // Ruimte voor het uploaden van bewijsstukken (PDF/afbeelding) bij kosten.
+      bodySizeLimit: "10mb",
+    },
+  },
 };
 
 export default nextConfig;
