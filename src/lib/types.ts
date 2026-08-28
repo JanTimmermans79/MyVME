@@ -10,6 +10,16 @@ export type KostenBron = "manueel" | "ai_voorstel";
 export type KostenStatus = "voorstel" | "bevestigd";
 export type TransactieBron = "xls" | "pdf";
 export type MatchType = "automatisch" | "manueel" | "onbevestigd";
+export type VmeRekening = "zicht" | "spaar";
+export type TransactieSoort =
+  | "voorschot"
+  | "afrekening"
+  | "kost"
+  | "interne_overboeking"
+  | "kapitaalsoproep"
+  | "rente"
+  | "terugbetaling"
+  | "overig";
 export type VerbruikType =
   | "mazout"
   | "koud_water"
@@ -80,6 +90,7 @@ export interface Bankrelatie {
   standaard_categorie: string | null;
   standaard_verdeelsleutel_id: string | null;
   standaard_betaler_type: BetalerType | null;
+  mandaatreferte: string | null;
   created_at: string;
 }
 
@@ -157,6 +168,8 @@ export interface Transactie {
   tegenpartij_iban: string | null;
   mededeling: string | null;
   bron: TransactieBron;
+  rekening: VmeRekening | null;
+  soort: TransactieSoort;
   import_hash: string;
   gematchte_unit_id: string | null;
   betaler_type: BetalerType | null;

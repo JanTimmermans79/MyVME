@@ -287,12 +287,14 @@ async function berekenVoorHuurder(
     (Number(vsh?.bedrag_per_maand ?? 0) * 12 * dagen) / boekjaarDagen,
   );
 
-  // voorschot ontvangen: gematchte huurderbetalingen in de periode
+  // voorschot ontvangen: gematchte huurder-VOORSCHOTTEN in de periode
+  // (soort='afrekening' van vorig boekjaar telt dus NIET mee)
   const { data: tx } = await db
     .from("transactie")
     .select("bedrag, tegenpartij_iban")
     .eq("gematchte_unit_id", huurder.unit_id)
     .eq("betaler_type", "huurder")
+    .eq("soort", "voorschot")
     .gte("datum", periodeStart)
     .lte("datum", periodeEind);
   const eigenIban = normIban(huurder.iban);

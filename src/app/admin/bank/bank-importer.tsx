@@ -12,10 +12,12 @@ import {
   type ParsedTx,
 } from "@/lib/bank-parse";
 import { euro, datum as fmtDatum } from "@/lib/format";
-import { importTransacties } from "./actions";
+import { importTransacties, parsePdfBankexport } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -41,37 +43,110 @@ const VELDEN: { value: Veld; label: string }[] = [
   { value: "negeren", label: "— negeren —" },
 ];
 
+interface PdfRij extends ParsedTx {
+  mandaatreferte: string | null;
+}
+interface PdfResultaat {
+  rekening: "zicht" | "spaar" | null;
+  rekeningnummer: string | null;
+  periode_van: string | null;
+  periode_tot: string | null;
+  saldo_begin: number | null;
+  saldo_eind: number | null;
+  txns: PdfRij[];
+}
+
+function PreviewTabel({ rows }: { rows: ParsedTx[] }) {
+  return (
+    <div className="max-h-72 overflow-auto rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Datum</TableHead>
+            <TableHead className="text-right">Bedrag</TableHead>
+            <TableHead>Tegenpartij</TableHead>
+            <TableHead>IBAN</TableHead>
+            <TableHead>Mededeling</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.slice(0, 60).map((t, i) => (
+            <TableRow key={i}>
+              <TableCell>{fmtDatum(t.datum)}</TableCell>
+              <TableCell className="text-right">{euro(t.bedrag)}</TableCell>
+              <TableCell>{t.tegenpartij_naam ?? "—"}</TableCell>
+              <TableCell className="font-mono text-xs">
+                {t.tegenpartij_iban ?? "—"}
+              </TableCell>
+              <TableCell className="max-w-xs truncate">
+                {t.mededeling ?? "—"}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 export function BankImporter({ vmeId }: { vmeId: string }) {
+  const [pending, startTransition] = useTransition();
+
+  // XLS
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [mapping, setMapping] = useState<Mapping>({});
   const [fileName, setFileName] = useState("");
-  const [pending, startTransition] = useTransition();
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+  // PDF
+  const [pdf, setPdf] = useState<PdfResultaat | null>(null);
+
+  async function onXls(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
     try {
-      const buf = await file.arrayBuffer();
-      const parsed = parseWorkbook(buf);
+      const parsed = parseWorkbook(await file.arrayBuffer());
       if (parsed.columns.length === 0) {
-        toast.error("Geen leesbare tabel gevonden in dit bestand.");
+        toast.error("Geen leesbare tabel gevonden.");
         return;
       }
       setSheet(parsed);
       setMapping(autoMap(parsed.columns));
     } catch {
-      toast.error("Kon het bestand niet lezen. Is het een geldig XLS/XLSX?");
+      toast.error("Kon het bestand niet lezen. Geldig XLS/XLSX?");
     }
   }
 
-  const result = sheet ? buildTransactions(sheet, mapping) : null;
+  function onPdf(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.set("pdf", file);
+    startTransition(async () => {
+      const res = (await parsePdfBankexport({ ok: false }, fd)) as {
+        ok: boolean;
+        error?: string;
+        message?: string;
+        data?: PdfResultaat;
+      };
+      if (res.ok && res.data) {
+        setPdf(res.data);
+        toast.success(res.message ?? "PDF gelezen.");
+      } else {
+        toast.error(res.error ?? "Kon de PDF niet lezen.");
+      }
+    });
+  }
 
-  function doImport() {
-    if (!result || result.ok.length === 0) return;
+  const xls = sheet ? buildTransactions(sheet, mapping) : null;
+
+  function importeer(rows: ParsedTx[], bron: "xls" | "pdf", rekening?: string) {
+    if (rows.length === 0) return;
     const fd = new FormData();
     fd.set("vme_id", vmeId);
-    fd.set("rows", JSON.stringify(result.ok));
+    fd.set("rows", JSON.stringify(rows));
+    fd.set("bron", bron);
+    if (rekening) fd.set("rekening", rekening);
     startTransition(async () => {
       const res = await importTransacties({ ok: false }, fd);
       if (res.ok) {
@@ -79,6 +154,7 @@ export function BankImporter({ vmeId }: { vmeId: string }) {
         setSheet(null);
         setMapping({});
         setFileName("");
+        setPdf(null);
       } else {
         toast.error(res.error ?? "Import mislukt.");
       }
@@ -86,23 +162,75 @@ export function BankImporter({ vmeId }: { vmeId: string }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="bankfile">Bankexport (XLS / XLSX)</Label>
-        <Input
-          id="bankfile"
-          type="file"
-          accept=".xls,.xlsx,.csv"
-          onChange={onFile}
-        />
-      </div>
+    <Tabs defaultValue="pdf" className="space-y-4">
+      <TabsList>
+        <TabsTrigger value="pdf">PDF (KBC)</TabsTrigger>
+        <TabsTrigger value="xls">XLS / XLSX</TabsTrigger>
+      </TabsList>
 
-      {sheet && (
-        <>
-          <div>
-            <p className="mb-2 text-sm font-medium">
-              Kolommen toewijzen ({fileName})
-            </p>
+      <TabsContent value="pdf" className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="pdffile">KBC-rekeninguittreksel (PDF)</Label>
+          <Input id="pdffile" type="file" accept=".pdf" onChange={onPdf} />
+        </div>
+
+        {pdf && (
+          <>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <Badge variant="secondary">
+                {pdf.rekening === "spaar"
+                  ? "Spaarrekening (reservefonds)"
+                  : pdf.rekening === "zicht"
+                    ? "Zichtrekening (werkrekening)"
+                    : "Rekening onbekend"}
+              </Badge>
+              <span className="text-muted-foreground">
+                {pdf.rekeningnummer} · {pdf.periode_van} → {pdf.periode_tot} ·{" "}
+                {pdf.txns.length} verrichtingen
+              </span>
+              {pdf.saldo_begin != null && pdf.saldo_eind != null && (
+                <Badge
+                  variant={
+                    Math.abs(
+                      pdf.saldo_begin +
+                        pdf.txns.reduce((s, t) => s + t.bedrag, 0) -
+                        pdf.saldo_eind,
+                    ) < 0.02
+                      ? "secondary"
+                      : "destructive"
+                  }
+                >
+                  saldo {euro(pdf.saldo_begin)} → {euro(pdf.saldo_eind)}
+                </Badge>
+              )}
+            </div>
+            <PreviewTabel rows={pdf.txns} />
+            <Button
+              onClick={() =>
+                importeer(pdf.txns, "pdf", pdf.rekening ?? undefined)
+              }
+              disabled={pending}
+            >
+              {pending ? "Bezig…" : `Importeer ${pdf.txns.length} verrichtingen`}
+            </Button>
+          </>
+        )}
+      </TabsContent>
+
+      <TabsContent value="xls" className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="xlsfile">Bankexport (XLS / XLSX / CSV)</Label>
+          <Input
+            id="xlsfile"
+            type="file"
+            accept=".xls,.xlsx,.csv"
+            onChange={onXls}
+          />
+        </div>
+
+        {sheet && (
+          <>
+            <p className="text-sm font-medium">Kolommen toewijzen ({fileName})</p>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {sheet.columns.map((col, i) => (
                 <div key={i} className="flex items-center gap-2">
@@ -132,64 +260,26 @@ export function BankImporter({ vmeId }: { vmeId: string }) {
                 </div>
               ))}
             </div>
-          </div>
 
-          {result && (
-            <>
-              <p className="text-sm text-muted-foreground">
-                {result.ok.length} leesbare transactie(s)
-                {result.fouten.length > 0 &&
-                  `, ${result.fouten.length} overgeslagen (${result.fouten
-                    .slice(0, 3)
-                    .map((f) => `rij ${f.rij}: ${f.reden}`)
-                    .join("; ")}${result.fouten.length > 3 ? "…" : ""})`}
-              </p>
-
-              {result.ok.length > 0 && (
-                <div className="max-h-72 overflow-auto rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Datum</TableHead>
-                        <TableHead className="text-right">Bedrag</TableHead>
-                        <TableHead>Tegenpartij</TableHead>
-                        <TableHead>IBAN</TableHead>
-                        <TableHead>Mededeling</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {result.ok.slice(0, 50).map((t: ParsedTx, i) => (
-                        <TableRow key={i}>
-                          <TableCell>{fmtDatum(t.datum)}</TableCell>
-                          <TableCell className="text-right">
-                            {euro(t.bedrag)}
-                          </TableCell>
-                          <TableCell>{t.tegenpartij_naam ?? "—"}</TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {t.tegenpartij_iban ?? "—"}
-                          </TableCell>
-                          <TableCell className="max-w-xs truncate">
-                            {t.mededeling ?? "—"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-
-              <Button
-                onClick={doImport}
-                disabled={pending || result.ok.length === 0}
-              >
-                {pending
-                  ? "Bezig…"
-                  : `Importeer ${result.ok.length} transactie(s)`}
-              </Button>
-            </>
-          )}
-        </>
-      )}
-    </div>
+            {xls && (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  {xls.ok.length} leesbare verrichting(en)
+                  {xls.fouten.length > 0 &&
+                    `, ${xls.fouten.length} overgeslagen`}
+                </p>
+                {xls.ok.length > 0 && <PreviewTabel rows={xls.ok} />}
+                <Button
+                  onClick={() => importeer(xls.ok, "xls", "zicht")}
+                  disabled={pending || xls.ok.length === 0}
+                >
+                  {pending ? "Bezig…" : `Importeer ${xls.ok.length} verrichtingen`}
+                </Button>
+              </>
+            )}
+          </>
+        )}
+      </TabsContent>
+    </Tabs>
   );
 }

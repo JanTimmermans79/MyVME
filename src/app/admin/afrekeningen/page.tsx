@@ -25,6 +25,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import type { Afrekening, Boekjaar, Eigenaar, Unit } from "@/lib/types";
 import { berekenHuurderAfrekeningen } from "@/lib/huurder-afrekening";
+import { voorschotControle } from "@/lib/voorschot-controle";
 import { berekenEnBewaar } from "./actions";
 import { AfrekeningTabel, type AfrekeningRij } from "./afrekening-client";
 
@@ -61,6 +62,7 @@ export default async function AfrekeningenPage({
   let huurderResultaten: Awaited<
     ReturnType<typeof berekenHuurderAfrekeningen>
   > = [];
+  let controle: Awaited<ReturnType<typeof voorschotControle>> = [];
   const opgeslagenHuurder = new Map<string, Afrekening>();
 
   if (boekjaar) {
@@ -121,6 +123,7 @@ export default async function AfrekeningenPage({
     huurderResultaten = (
       await berekenHuurderAfrekeningen(adminDb, boekjaar.id)
     ).filter((h) => h.actief);
+    controle = await voorschotControle(adminDb, boekjaar.id);
   }
 
   return (
@@ -158,6 +161,61 @@ export default async function AfrekeningenPage({
           )}
         </CardContent>
       </Card>
+
+      {boekjaar && controle.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Voorschotcontrole</CardTitle>
+            <CardDescription>
+              Verwacht vs. effectief gestort per bewoner (zichtrekening) en per
+              eigenaar-reservefonds (spaarrekening). Een afwijking wijst op een
+              gemiste of foutieve storting.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Unit</TableHead>
+                  <TableHead>Wie</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead className="text-right">Verwacht</TableHead>
+                  <TableHead className="text-right">Ontvangen</TableHead>
+                  <TableHead className="text-right">Kapitaalsopr.</TableHead>
+                  <TableHead className="text-right">Afwijking</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {controle.map((c, i) => (
+                  <TableRow key={i}>
+                    <TableCell>{c.unit_naam}</TableCell>
+                    <TableCell>{c.wie}</TableCell>
+                    <TableCell className="capitalize">{c.soort}</TableCell>
+                    <TableCell className="text-right">
+                      {euro(c.verwacht)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {euro(c.ontvangen)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {c.kapitaalsoproep ? euro(c.kapitaalsoproep) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge
+                        variant={
+                          Math.abs(c.afwijking) > 1 ? "destructive" : "secondary"
+                        }
+                      >
+                        {euro(c.afwijking)}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {boekjaar && (
         <>

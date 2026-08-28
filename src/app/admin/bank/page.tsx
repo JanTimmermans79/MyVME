@@ -93,9 +93,10 @@ export default async function BankPage() {
         <CardHeader>
           <CardTitle>Bankexport importeren</CardTitle>
           <CardDescription>
-            XLS/XLSX is het hoofdformaat. Matching gebeurt eerst op de
-            structuurcode-prefix (automatisch), daarna op naamgelijkenis
-            (suggestie). Niets wordt stil genegeerd.
+            KBC-PDF of XLS/XLSX. De app herkent de rekening (zicht/spaar) en de
+            soort verrichting (voorschot, kost, afrekening vorig jaar, interne
+            overboeking, kapitaalsoproep, …). Enkel <strong>voorschotten</strong>{" "}
+            tellen mee in de jaarafrekening. Niets wordt stil genegeerd.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -130,6 +131,19 @@ export default async function BankPage() {
                       {t.mededeling}
                     </p>
                   )}
+                  <p className="mt-1 text-xs">
+                    <Badge variant="outline">{t.soort}</Badge>{" "}
+                    {t.rekening && (
+                      <span className="text-muted-foreground">
+                        {t.rekening}rekening
+                      </span>
+                    )}
+                    {t.tegenpartij_iban && (
+                      <span className="ml-2 font-mono text-muted-foreground">
+                        {t.tegenpartij_iban}
+                      </span>
+                    )}
+                  </p>
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     {sug && (
                       <ActionForm
@@ -173,6 +187,8 @@ export default async function BankPage() {
                     <TableHead>Datum</TableHead>
                     <TableHead className="text-right">Bedrag</TableHead>
                     <TableHead>Tegenpartij</TableHead>
+                    <TableHead>Rek.</TableHead>
+                    <TableHead>Soort</TableHead>
                     <TableHead>Unit</TableHead>
                     <TableHead>Betaler</TableHead>
                     <TableHead>Match</TableHead>
@@ -187,6 +203,12 @@ export default async function BankPage() {
                         {euro(t.bedrag)}
                       </TableCell>
                       <TableCell>{t.tegenpartij_naam ?? "—"}</TableCell>
+                      <TableCell className="text-xs">
+                        {t.rekening ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{t.soort}</Badge>
+                      </TableCell>
                       <TableCell>
                         {t.gematchte_unit_id
                           ? unitNaam.get(t.gematchte_unit_id) ?? "—"
