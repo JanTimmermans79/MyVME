@@ -95,9 +95,28 @@ onderhoud, diverse — opgeteld uit de bankimport per categorie.
 - [x] **2c** — voorschotten herwerken (eigenaar per boekjaar, huurder per huurder/boekjaar)
 - [x] **2d** — tellers + meterstanden + eenheidsprijzen
 - [x] **2e** — verbruiksberekening + `afrekening_lijn` + pro-rata + huurder-detail + mailen
-- [ ] **2f** — factuur-upload ↔ uitgaande betaling matchen; bankrelatie-import maakt kosten-voorstel
+- [x] **2f** — "Genereer uit bank" maakt kosten-voorstellen uit betalingen die aan een bankrelatie hangen (`kosten.betaald_met_transactie_id`). Terugbetaling = negatieve kost.
 - [x] **2g — KBC PDF-import + `transactie.soort`/`rekening` + voorschotcontrole** (migr. 20260828140000). Parser getest tegen echte zicht- + spaarrekening, saldo klopt.
-- [ ] **polish** — admin-nav groeperen (15 items); owner-dashboard huurderafrekening tonen; PDF/print van de afrekening; reconciliatie totaal water/mazout (bankfactuur vs som meterverbruik)
+- [x] **2h — `kosten.verdeling`** (individueel_verbruik / gelijk_huurders / per_quotiteit / gelijk_eigenaars) + `bankrelatie.standaard_verdeling` / `mandaatreferte` / `naam_bevat`. Afrekeningsengines respecteren de verdeling. (migr. 20260828150000)
+- [ ] **polish** — admin-nav groeperen (15 items); owner-dashboard huurderafrekening tonen; PDF/print van de afrekening; reconciliatie totaal water/mazout (bankfactuur vs som meterverbruik); factuur-bestand koppelen aan een kost-voorstel
+
+### Kostenverdeling-regels (VME Mooi Zicht, bevestigd door Jan)
+
+| Kost | Verdeling |
+|---|---|
+| Koud/warm water (verbruik) | individueel_verbruik (tellers × prijs) |
+| Stookolie | individueel_verbruik (ΔCV + Δwarm) × mazoutprijs |
+| Watergroep-**terugbetaling** | gelijk_huurders (negatief → krediet voor de huurders) |
+| Elektriciteit (Eneco/ENI) | gelijk_huurders |
+| Schoonmaak (Jo Vrancken) + materiaal (steenreiniger) | gelijk_huurders (categorie schoonmaak) |
+| Zandzakjes e.d. | gelijk_huurders (categorie divers) |
+| Zout/ontkalker/TL-lampen | gelijk_huurders |
+| Syndicus (Jan Timmermans) | gelijk_huurders |
+| KBC-Bedrijfsrekening (bankkosten) | gelijk_huurders — herkend op naam (`naam_bevat`) |
+| Verzekering (KBC Verz. / Fortis AG) | gelijk_huurders (keuze van Jan) |
+| Water onderhoud (Ecowater) | gelijk_huurders |
+| Gevelrenovatie (Gevelco) | eigenaars — betaald uit reservefonds + kapitaalsoproep |
+| Advocaat | gelijk_eigenaars of per_quotiteit |
 
 Elk blok = aparte migratie + commit, getest en gedeployed.
 

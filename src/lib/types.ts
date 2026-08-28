@@ -8,6 +8,18 @@ export type BetalerType = "eigenaar" | "huurder";
 export type BoekjaarStatus = "open" | "afgesloten";
 export type KostenBron = "manueel" | "ai_voorstel";
 export type KostenStatus = "voorstel" | "bevestigd";
+export type KostenVerdeling =
+  | "individueel_verbruik"
+  | "gelijk_huurders"
+  | "per_quotiteit"
+  | "gelijk_eigenaars";
+
+export const VERDELING_LABEL: Record<KostenVerdeling, string> = {
+  individueel_verbruik: "Individueel verbruik (tellers)",
+  gelijk_huurders: "Gelijk over de huurders",
+  per_quotiteit: "Per quotiteit (verdeelsleutel)",
+  gelijk_eigenaars: "Gelijk over de eigenaars",
+};
 export type TransactieBron = "xls" | "pdf";
 export type MatchType = "automatisch" | "manueel" | "onbevestigd";
 export type VmeRekening = "zicht" | "spaar";
@@ -90,7 +102,9 @@ export interface Bankrelatie {
   standaard_categorie: string | null;
   standaard_verdeelsleutel_id: string | null;
   standaard_betaler_type: BetalerType | null;
+  standaard_verdeling: KostenVerdeling | null;
   mandaatreferte: string | null;
+  naam_bevat: string | null;
   created_at: string;
 }
 
@@ -133,7 +147,9 @@ export interface Kosten {
   document_url: string | null;
   verdeelsleutel_id: string | null;
   betaler_type: BetalerType;
+  verdeling: KostenVerdeling;
   betaald_met_transactie_id: string | null;
+  omschrijving_extra: string | null;
   bron: KostenBron;
   status: KostenStatus;
   created_at: string;

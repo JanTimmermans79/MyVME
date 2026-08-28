@@ -50,6 +50,12 @@ export async function createKost(
       fileEntry instanceof File ? fileEntry : null,
     );
 
+    const verdeling = str(formData, "verdeling");
+    const betaler_type: "huurder" | "eigenaar" =
+      verdeling === "per_quotiteit" || verdeling === "gelijk_eigenaars"
+        ? "eigenaar"
+        : "huurder";
+
     const { error } = await db.from("kosten").insert({
       vme_id,
       boekjaar_id,
@@ -59,7 +65,15 @@ export async function createKost(
       datum,
       leverancier: optStr(formData, "leverancier"),
       verdeelsleutel_id: optStr(formData, "verdeelsleutel_id"),
-      betaler_type: str(formData, "betaler_type") === "huurder" ? "huurder" : "eigenaar",
+      verdeling: [
+        "individueel_verbruik",
+        "gelijk_huurders",
+        "per_quotiteit",
+        "gelijk_eigenaars",
+      ].includes(verdeling)
+        ? verdeling
+        : "gelijk_huurders",
+      betaler_type,
       document_url,
       bron: "manueel",
       status: "bevestigd",
@@ -69,6 +83,130 @@ export async function createKost(
     revalidatePath("/admin/kosten");
     revalidatePath("/admin", "layout");
     return { ok: true, message: "Kost geboekt." };
+  });
+}
+
+const nz = (s: string | null | undefined) =>
+  s ? s.replace(/\s+/g, "").toUpperCase() : null;
+
+/**
+ * Maakt kosten-VOORSTELLEN uit banktransacties met soort='kost' die aan een
+ * geconfigureerde bankrelatie gekoppeld kunnen worden. De admin bevestigt ze.
+ * Een terugbetaling (inkomend) wordt een negatieve kost (krediet).
+ */
+export async function genereerKostenUitBank(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAdmin(async (db) => {
+    const vme_id = str(formData, "vme_id");
+    if (!vme_id) return { ok: false, error: "Geen VME." };
+
+    const [{ data: relaties }, { data: boekjaren }, { data: txs }, { data: reeds }] =
+      await Promise.all([
+        db.from("bankrelatie").select("*").eq("vme_id", vme_id),
+        db
+          .from("boekjaar")
+          .select("id, start_datum, eind_datum")
+          .eq("vme_id", vme_id),
+        db
+          .from("transactie")
+          .select(
+            "id, datum, bedrag, tegenpartij_naam, tegenpartij_iban, mededeling, soort",
+          )
+          .eq("vme_id", vme_id)
+          .eq("soort", "kost"),
+        db
+          .from("kosten")
+          .select("betaald_met_transactie_id")
+          .eq("vme_id", vme_id)
+          .not("betaald_met_transactie_id", "is", null),
+      ]);
+
+    const gekoppeld = new Set(
+      (reeds ?? []).map(
+        (k: { betaald_met_transactie_id: string }) => k.betaald_met_transactie_id,
+      ),
+    );
+    const rels = (relaties ?? []) as {
+      naam: string;
+      iban: string | null;
+      mandaatreferte: string | null;
+      naam_bevat: string | null;
+      standaard_categorie: string | null;
+      standaard_verdeling: string | null;
+      standaard_verdeelsleutel_id: string | null;
+    }[];
+    const bjs = (boekjaren ?? []) as {
+      id: string;
+      start_datum: string;
+      eind_datum: string;
+    }[];
+
+    let gemaakt = 0;
+    let overgeslagen = 0;
+
+    for (const t of (txs ?? []) as {
+      id: string;
+      datum: string;
+      bedrag: number;
+      tegenpartij_naam: string | null;
+      tegenpartij_iban: string | null;
+      mededeling: string | null;
+    }[]) {
+      if (gekoppeld.has(t.id)) continue;
+
+      const tIban = nz(t.tegenpartij_iban);
+      const naam = (t.tegenpartij_naam ?? "").toUpperCase();
+      const rel = rels.find(
+        (r) =>
+          (tIban && nz(r.iban) === tIban) ||
+          (r.mandaatreferte &&
+            (t.mededeling ?? "").includes(r.mandaatreferte)) ||
+          (r.naam_bevat &&
+            naam.includes(r.naam_bevat.toUpperCase())),
+      );
+      const bj = bjs.find(
+        (b) => t.datum >= b.start_datum && t.datum <= b.eind_datum,
+      );
+      if (!rel || !rel.standaard_categorie || !bj) {
+        overgeslagen += 1;
+        continue;
+      }
+
+      // Een terugbetaling (inkomend) van een individueel-verbruik-leverancier
+      // (bv. Watergroep) kan niet via de tellers verrekend worden -> gelijk.
+      let verdeling = rel.standaard_verdeling ?? "gelijk_huurders";
+      if (t.bedrag > 0 && verdeling === "individueel_verbruik")
+        verdeling = "gelijk_huurders";
+      const betaler_type =
+        verdeling === "per_quotiteit" || verdeling === "gelijk_eigenaars"
+          ? "eigenaar"
+          : "huurder";
+
+      const { error } = await db.from("kosten").insert({
+        vme_id,
+        boekjaar_id: bj.id,
+        categorie: rel.standaard_categorie,
+        bedrag: -Number(t.bedrag), // uitgaand (-) -> kost (+), terugbetaling (+) -> krediet (-)
+        datum: t.datum,
+        leverancier: t.tegenpartij_naam,
+        verdeelsleutel_id: rel.standaard_verdeelsleutel_id,
+        verdeling,
+        betaler_type,
+        betaald_met_transactie_id: t.id,
+        bron: "ai_voorstel",
+        status: "voorstel",
+      });
+      if (error) overgeslagen += 1;
+      else gemaakt += 1;
+    }
+
+    revalidatePath("/admin/kosten");
+    return {
+      ok: true,
+      message: `${gemaakt} kostenvoorstel(len) aangemaakt, ${overgeslagen} overgeslagen (geen bankrelatie of boekjaar).`,
+    };
   });
 }
 

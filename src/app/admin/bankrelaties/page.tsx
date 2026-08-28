@@ -85,7 +85,7 @@ export default async function BankrelatiesPage() {
                     <TableHead>Type</TableHead>
                     <TableHead>Categorie</TableHead>
                     <TableHead>Verdeelsleutel</TableHead>
-                    <TableHead>T.l.v.</TableHead>
+                    <TableHead>Verdeling</TableHead>
                     <TableHead />
                   </TableRow>
                 </TableHeader>
@@ -93,7 +93,9 @@ export default async function BankrelatiesPage() {
                   {relaties.map((r) => (
                     <TableRow key={r.id}>
                       <TableCell className="font-medium">{r.naam}</TableCell>
-                      <TableCell className="font-mono text-xs">{r.iban}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {r.iban ?? r.mandaatreferte ?? r.naam_bevat ?? "—"}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline">{r.type}</Badge>
                       </TableCell>
@@ -104,7 +106,7 @@ export default async function BankrelatiesPage() {
                           : "—"}
                       </TableCell>
                       <TableCell className="capitalize">
-                        {r.standaard_betaler_type ?? "—"}
+                        {r.standaard_verdeling?.replace(/_/g, " ") ?? "—"}
                       </TableCell>
                       <TableCell className="text-right">
                         <EditBankrelatieDialog

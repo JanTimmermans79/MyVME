@@ -55,9 +55,20 @@ function Fields({
       <Field
         label="IBAN"
         name="iban"
-        required
         placeholder="BE.."
         defaultValue={br?.iban ?? ""}
+      />
+      <Field
+        label="Mandaatreferte (domiciliëring)"
+        name="mandaatreferte"
+        hint="Voor domiciliëringen zonder IBAN, bv. Eneco 61000001597504"
+        defaultValue={br?.mandaatreferte ?? ""}
+      />
+      <Field
+        label="Herken aan naam (deel)"
+        name="naam_bevat"
+        hint='bv. "KBC-Bedrijfsrekening" voor bankkosten zonder IBAN'
+        defaultValue={br?.naam_bevat ?? ""}
       />
       <div className="space-y-1.5">
         <Label htmlFor="type">Type</Label>
@@ -109,17 +120,25 @@ function Fields({
         </Select>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="standaard_betaler_type">Ten laste van</Label>
+        <Label htmlFor="standaard_verdeling">Standaard verdeling</Label>
         <Select
-          name="standaard_betaler_type"
-          defaultValue={br?.standaard_betaler_type ?? undefined}
+          name="standaard_verdeling"
+          defaultValue={br?.standaard_verdeling ?? undefined}
         >
-          <SelectTrigger id="standaard_betaler_type" className="w-full">
+          <SelectTrigger id="standaard_verdeling" className="w-full">
             <SelectValue placeholder="(geen)" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="eigenaar">Eigenaar</SelectItem>
-            <SelectItem value="huurder">Huurder</SelectItem>
+            <SelectItem value="gelijk_huurders">
+              Gelijk over de huurders
+            </SelectItem>
+            <SelectItem value="individueel_verbruik">
+              Individueel verbruik (tellers)
+            </SelectItem>
+            <SelectItem value="per_quotiteit">Per quotiteit</SelectItem>
+            <SelectItem value="gelijk_eigenaars">
+              Gelijk over de eigenaars
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>

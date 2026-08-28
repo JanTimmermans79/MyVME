@@ -105,14 +105,24 @@ export function CreateKostForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="betaler_type">Ten laste van</Label>
-        <Select name="betaler_type" defaultValue="eigenaar">
-          <SelectTrigger id="betaler_type" className="w-full">
+        <Label htmlFor="verdeling">Verdeling</Label>
+        <Select name="verdeling" defaultValue="gelijk_huurders">
+          <SelectTrigger id="verdeling" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="eigenaar">Eigenaar</SelectItem>
-            <SelectItem value="huurder">Huurder</SelectItem>
+            <SelectItem value="gelijk_huurders">
+              Gelijk over de huurders
+            </SelectItem>
+            <SelectItem value="individueel_verbruik">
+              Individueel verbruik (tellers)
+            </SelectItem>
+            <SelectItem value="per_quotiteit">
+              Per quotiteit (verdeelsleutel) — eigenaars
+            </SelectItem>
+            <SelectItem value="gelijk_eigenaars">
+              Gelijk over de eigenaars
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>

@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveVme } from "@/lib/vme-context";
 import { euro, datum } from "@/lib/format";
 import { NoVme } from "@/components/no-vme";
+import { ActionForm } from "@/components/action-form";
+import { SubmitButton } from "@/components/form";
+import { genereerKostenUitBank } from "./actions";
 import {
   Card,
   CardContent,
@@ -60,6 +63,24 @@ export default async function KostenPage() {
   return (
     <div className="space-y-6">
       <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle>Kosten uit de bankimport</CardTitle>
+            <CardDescription>
+              Maakt kostenvoorstellen uit betalingen (soort “kost”) die aan een
+              bankrelatie gekoppeld zijn. Bevestig ze daarna in de lijst.
+            </CardDescription>
+          </div>
+          <ActionForm
+            action={genereerKostenUitBank}
+            hiddenFields={{ vme_id: active.id }}
+          >
+            <SubmitButton size="sm">Genereer uit bank</SubmitButton>
+          </ActionForm>
+        </CardHeader>
+      </Card>
+
+      <Card>
         <CardHeader>
           <CardTitle>Kost manueel boeken</CardTitle>
           <CardDescription>
@@ -97,7 +118,7 @@ export default async function KostenPage() {
                     <TableHead>Categorie</TableHead>
                     <TableHead>Leverancier</TableHead>
                     <TableHead>Sleutel</TableHead>
-                    <TableHead>T.l.v.</TableHead>
+                    <TableHead>Verdeling</TableHead>
                     <TableHead className="text-right">Bedrag</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Acties</TableHead>
@@ -116,7 +137,9 @@ export default async function KostenPage() {
                           <span className="text-destructive">niet toegewezen</span>
                         )}
                       </TableCell>
-                      <TableCell className="capitalize">{k.betaler_type}</TableCell>
+                      <TableCell className="text-xs">
+                        {k.verdeling.replace(/_/g, " ")}
+                      </TableCell>
                       <TableCell className="text-right">{euro(k.bedrag)}</TableCell>
                       <TableCell>
                         <Badge

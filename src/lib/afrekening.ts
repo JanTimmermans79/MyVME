@@ -55,12 +55,13 @@ export async function berekenAfrekening(
 
   const { data: kosten } = await db
     .from("kosten")
-    .select("bedrag, betaler_type, verdeelsleutel_id")
+    .select("bedrag, betaler_type, verdeling, verdeelsleutel_id")
     .eq("boekjaar_id", boekjaarId)
     .eq("status", "bevestigd");
   const kostenList = (kosten ?? []) as {
     bedrag: number;
     betaler_type: BetalerType;
+    verdeling: string;
     verdeelsleutel_id: string | null;
   }[];
 
@@ -116,16 +117,26 @@ export async function berekenAfrekening(
   let totaalKosten = 0;
   const regels: AfrekeningRegel[] = [];
 
-  // Enkel de EIGENAAR-afrekening: aandeel per kostenpost via de verdeelsleutel.
+  // Enkel de EIGENAAR-afrekening. Twee verdeelmethodes:
+  //   per_quotiteit    -> aandeel via de verdeelsleutel van de kost
+  //   gelijk_eigenaars -> bedrag gelijk over alle units
   // Huurders worden apart berekend (verbruik via tellers) in huurder-afrekening.ts.
   const bt: BetalerType = "eigenaar";
+  const nUnits = unitList.length || 1;
+  const eigenaarKosten = kostenList.filter((k) => k.betaler_type === bt);
+
   for (const unit of unitList) {
     let verschuldigd = 0;
-    for (const k of kostenList) {
-      if (k.betaler_type !== bt) continue;
-      if (!k.verdeelsleutel_id) continue;
+    for (const k of eigenaarKosten) {
+      if (k.verdeling === "gelijk_eigenaars" || !k.verdeelsleutel_id) {
+        verschuldigd += Number(k.bedrag) / nUnits;
+        continue;
+      }
       const totaal = totaalPerSleutel.get(k.verdeelsleutel_id) ?? 0;
-      if (totaal <= 0) continue;
+      if (totaal <= 0) {
+        verschuldigd += Number(k.bedrag) / nUnits; // geen aandelen -> gelijk
+        continue;
+      }
       const aandeel = aandeelMap.get(k.verdeelsleutel_id)?.get(unit.id) ?? 0;
       verschuldigd += (Number(k.bedrag) * aandeel) / totaal;
     }
@@ -152,10 +163,10 @@ export async function berekenAfrekening(
     }
   }
 
-  for (const k of kostenList) {
-    if (k.betaler_type !== "eigenaar") continue;
+  for (const k of eigenaarKosten) {
     totaalKosten += Number(k.bedrag);
-    if (!k.verdeelsleutel_id) kostenZonderSleutel += Number(k.bedrag);
+    if (k.verdeling !== "per_quotiteit" && !k.verdeelsleutel_id)
+      kostenZonderSleutel += 0; // gelijk_eigenaars is een geldige keuze, geen waarschuwing
   }
 
   return {

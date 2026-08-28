@@ -132,13 +132,23 @@ export function classificeer(
     }
   }
 
-  // uitgaand = kost
+  // betaling aan / terugbetaling van een gekende leverancier = kost
+  if (rel?.type === "leverancier") {
+    return {
+      soort: "kost",
+      gematchte_unit_id: null,
+      betaler_type: null,
+      match_type: "automatisch",
+    };
+  }
+
+  // overige uitgaande betaling = (nog te classificeren) kost
   if (tx.bedrag < 0) {
     return {
       soort: "kost",
       gematchte_unit_id: null,
       betaler_type: null,
-      match_type: rel?.type === "leverancier" ? "automatisch" : "onbevestigd",
+      match_type: "onbevestigd",
     };
   }
 

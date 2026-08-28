@@ -5,16 +5,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 type Db = ReturnType<typeof createAdminClient>;
 
-/** Categorieën die individueel via de tellers worden afgerekend (niet gedeeld). */
-const METER_CATEGORIEEN = new Set([
-  "mazout",
-  "stookolie",
-  "koud water",
-  "warm water",
-  "koud_water",
-  "warm_water",
-]);
-
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const round3 = (n: number) => Math.round((n + Number.EPSILON) * 1000) / 1000;
 
@@ -105,15 +95,13 @@ async function laadContext(db: Db, boekjaarId: string): Promise<Ctx> {
 
   const { data: kosten } = await db
     .from("kosten")
-    .select("bedrag, categorie")
+    .select("bedrag, verdeling")
     .eq("boekjaar_id", boekjaarId)
-    .eq("status", "bevestigd")
-    .eq("betaler_type", "huurder");
+    .eq("status", "bevestigd");
+  // Alles wat 'gelijk over de huurders' verdeeld wordt (elektriciteit, schoonmaak,
+  // materiaal, bankkosten, en negatieve posten zoals de watergroep-terugbetaling).
   const totaalGedeeld = (kosten ?? [])
-    .filter(
-      (k: { categorie: string }) =>
-        !METER_CATEGORIEEN.has(k.categorie.toLowerCase()),
-    )
+    .filter((k: { verdeling: string }) => k.verdeling === "gelijk_huurders")
     .reduce((s: number, k: { bedrag: number }) => s + Number(k.bedrag), 0);
 
   return {
