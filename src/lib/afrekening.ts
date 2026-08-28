@@ -116,43 +116,44 @@ export async function berekenAfrekening(
   let totaalKosten = 0;
   const regels: AfrekeningRegel[] = [];
 
+  // Enkel de EIGENAAR-afrekening: aandeel per kostenpost via de verdeelsleutel.
+  // Huurders worden apart berekend (verbruik via tellers) in huurder-afrekening.ts.
+  const bt: BetalerType = "eigenaar";
   for (const unit of unitList) {
-    for (const bt of ["eigenaar", "huurder"] as BetalerType[]) {
-      let verschuldigd = 0;
-      for (const k of kostenList) {
-        if (k.betaler_type !== bt) continue;
-        if (!k.verdeelsleutel_id) continue;
-        const totaal = totaalPerSleutel.get(k.verdeelsleutel_id) ?? 0;
-        if (totaal <= 0) continue;
-        const aandeel =
-          aandeelMap.get(k.verdeelsleutel_id)?.get(unit.id) ?? 0;
-        verschuldigd += (Number(k.bedrag) * aandeel) / totaal;
-      }
+    let verschuldigd = 0;
+    for (const k of kostenList) {
+      if (k.betaler_type !== bt) continue;
+      if (!k.verdeelsleutel_id) continue;
+      const totaal = totaalPerSleutel.get(k.verdeelsleutel_id) ?? 0;
+      if (totaal <= 0) continue;
+      const aandeel = aandeelMap.get(k.verdeelsleutel_id)?.get(unit.id) ?? 0;
+      verschuldigd += (Number(k.bedrag) * aandeel) / totaal;
+    }
 
-      let ontvangen = 0;
-      for (const t of txList) {
-        if (t.gematchte_unit_id !== unit.id) continue;
-        if (t.betaler_type !== bt) continue;
-        ontvangen += Number(t.bedrag);
-      }
+    let ontvangen = 0;
+    for (const t of txList) {
+      if (t.gematchte_unit_id !== unit.id) continue;
+      if (t.betaler_type !== bt) continue;
+      ontvangen += Number(t.bedrag);
+    }
 
-      verschuldigd = round2(verschuldigd);
-      ontvangen = round2(ontvangen);
+    verschuldigd = round2(verschuldigd);
+    ontvangen = round2(ontvangen);
 
-      if (verschuldigd !== 0 || ontvangen !== 0) {
-        regels.push({
-          unit_id: unit.id,
-          unit_naam: unit.naam,
-          betaler_type: bt,
-          verschuldigd,
-          ontvangen,
-          saldo: round2(ontvangen - verschuldigd),
-        });
-      }
+    if (verschuldigd !== 0 || ontvangen !== 0) {
+      regels.push({
+        unit_id: unit.id,
+        unit_naam: unit.naam,
+        betaler_type: bt,
+        verschuldigd,
+        ontvangen,
+        saldo: round2(ontvangen - verschuldigd),
+      });
     }
   }
 
   for (const k of kostenList) {
+    if (k.betaler_type !== "eigenaar") continue;
     totaalKosten += Number(k.bedrag);
     if (!k.verdeelsleutel_id) kostenZonderSleutel += Number(k.bedrag);
   }

@@ -46,11 +46,14 @@ alter table public.afrekening
 
 alter table public.afrekening
   drop constraint if exists afrekening_boekjaar_id_unit_id_betaler_type_key;
+alter table public.afrekening
+  drop constraint if exists afrekening_uniek;
 
-create unique index if not exists afrekening_eigenaar_uniek
-  on public.afrekening (boekjaar_id, unit_id) where betaler_type = 'eigenaar';
-create unique index if not exists afrekening_huurder_uniek
-  on public.afrekening (boekjaar_id, huurder_id) where betaler_type = 'huurder';
+-- NULLS NOT DISTINCT (PG15+): eigenaar-rijen hebben huurder_id = null en zijn
+-- toch uniek per (boekjaar, unit).
+alter table public.afrekening
+  add constraint afrekening_uniek
+  unique nulls not distinct (boekjaar_id, unit_id, betaler_type, huurder_id);
 
 create table if not exists public.afrekening_lijn (
   id            uuid primary key default gen_random_uuid(),

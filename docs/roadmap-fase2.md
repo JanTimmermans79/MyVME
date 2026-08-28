@@ -90,11 +90,12 @@ onderhoud, diverse — opgeteld uit de bankimport per categorie.
 
 ## Bouwvolgorde
 
-- [ ] **2a** — huurder (voornaam, iban) + eigenaar-iban + `transactie.tegenpartij_iban` + IBAN-matching in de import + admin-huurderbeheer
-- [ ] **2b** — `bankrelatie` (configureerbare tegenpartijen) → import categoriseert automatisch
-- [ ] **2c** — voorschotten herwerken (eigenaar per boekjaar, huurder per huurder/boekjaar)
-- [ ] **2d** — tellers + meterstanden + eenheidsprijzen
-- [ ] **2e** — verbruiksberekening + `afrekening_lijn` + pro-rata + huurder-overzicht
-- [ ] **2f** — factuur ↔ betaling matching
+- [x] **2a** — huurder (voornaam, iban) + eigenaar-iban + `transactie.tegenpartij_iban` + IBAN-matching in de import + admin-huurderbeheer
+- [x] **2b** — `bankrelatie` (configureerbare tegenpartijen) — CRUD klaar; import-integratie (auto-kosten uit betaling) volgt met 2f
+- [x] **2c** — voorschotten herwerken (eigenaar per boekjaar, huurder per huurder/boekjaar)
+- [x] **2d** — tellers + meterstanden + eenheidsprijzen
+- [x] **2e** — verbruiksberekening + `afrekening_lijn` + pro-rata + huurder-detail + mailen
+- [ ] **2f** — factuur-upload ↔ uitgaande betaling matchen; bankrelatie-import maakt kosten-voorstel
+- [ ] **polish** — admin-nav groeperen (14 items); owner-dashboard huurderafrekening tonen; PDF/print van de afrekening
 
 Elk blok = aparte migratie + commit, getest en gedeployed.
