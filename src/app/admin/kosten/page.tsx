@@ -1,0 +1,158 @@
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { getActiveVme } from "@/lib/vme-context";
+import { euro, datum } from "@/lib/format";
+import { NoVme } from "@/components/no-vme";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import type { Boekjaar, Kosten, Verdeelsleutel } from "@/lib/types";
+import {
+  CreateKostForm,
+  ConfirmKostButton,
+  DeleteKostButton,
+} from "./kosten-forms";
+
+export const metadata = { title: "Kosten" };
+
+export default async function KostenPage() {
+  const { active } = await getActiveVme();
+  if (!active) return <NoVme />;
+
+  const supabase = await createClient();
+  const [{ data: boekjaren }, { data: sleutels }, { data: kosten }] =
+    await Promise.all([
+      supabase
+        .from("boekjaar")
+        .select("*")
+        .eq("vme_id", active.id)
+        .order("start_datum", { ascending: false })
+        .returns<Boekjaar[]>(),
+      supabase
+        .from("verdeelsleutel")
+        .select("*")
+        .eq("vme_id", active.id)
+        .order("naam")
+        .returns<Verdeelsleutel[]>(),
+      supabase
+        .from("kosten")
+        .select("*")
+        .eq("vme_id", active.id)
+        .order("datum", { ascending: false })
+        .returns<Kosten[]>(),
+    ]);
+
+  const sleutelById = new Map((sleutels ?? []).map((s) => [s.id, s.naam]));
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Kost manueel boeken</CardTitle>
+          <CardDescription>
+            Bewijsstukken worden privé bewaard in Supabase Storage.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!boekjaren || boekjaren.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Maak eerst een boekjaar aan.
+            </p>
+          ) : (
+            <CreateKostForm
+              vmeId={active.id}
+              boekjaren={boekjaren}
+              verdeelsleutels={sleutels ?? []}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Kosten ({kosten?.length ?? 0})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!kosten || kosten.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nog geen kosten.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Datum</TableHead>
+                    <TableHead>Categorie</TableHead>
+                    <TableHead>Leverancier</TableHead>
+                    <TableHead>Sleutel</TableHead>
+                    <TableHead>T.l.v.</TableHead>
+                    <TableHead className="text-right">Bedrag</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Acties</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {kosten.map((k) => (
+                    <TableRow key={k.id}>
+                      <TableCell>{datum(k.datum)}</TableCell>
+                      <TableCell>{k.categorie}</TableCell>
+                      <TableCell>{k.leverancier ?? "—"}</TableCell>
+                      <TableCell>
+                        {k.verdeelsleutel_id ? (
+                          sleutelById.get(k.verdeelsleutel_id) ?? "—"
+                        ) : (
+                          <span className="text-destructive">niet toegewezen</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="capitalize">{k.betaler_type}</TableCell>
+                      <TableCell className="text-right">{euro(k.bedrag)}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            k.status === "bevestigd" ? "secondary" : "outline"
+                          }
+                        >
+                          {k.status}
+                          {k.bron === "ai_voorstel" ? " · AI" : ""}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-2">
+                          {k.document_url && (
+                            <Link
+                              href={`/admin/kosten/document?path=${encodeURIComponent(k.document_url)}`}
+                              target="_blank"
+                              className="text-sm underline"
+                            >
+                              Bewijs
+                            </Link>
+                          )}
+                          {k.status === "voorstel" && (
+                            <ConfirmKostButton id={k.id} />
+                          )}
+                          <DeleteKostButton id={k.id} />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

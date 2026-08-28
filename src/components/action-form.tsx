@@ -4,7 +4,7 @@ import { useActionState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FormMessage } from "@/components/form";
-import { IDLE, type ActionState } from "@/lib/action-helpers";
+import { IDLE, type ActionState } from "@/lib/action-state";
 
 type Action = (
   prev: ActionState,

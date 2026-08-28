@@ -2,14 +2,9 @@ import "server-only";
 
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { type ActionState, IDLE } from "@/lib/action-state";
 
-export type ActionState = {
-  ok: boolean;
-  error?: string;
-  message?: string;
-};
-
-export const IDLE: ActionState = { ok: false };
+export { type ActionState, IDLE };
 
 /**
  * Voert `fn` uit met een service-role client, maar enkel nadat is bevestigd dat
