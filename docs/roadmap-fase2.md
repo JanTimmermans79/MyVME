@@ -96,6 +96,59 @@ onderhoud, diverse — opgeteld uit de bankimport per categorie.
 - [x] **2d** — tellers + meterstanden + eenheidsprijzen
 - [x] **2e** — verbruiksberekening + `afrekening_lijn` + pro-rata + huurder-detail + mailen
 - [ ] **2f** — factuur-upload ↔ uitgaande betaling matchen; bankrelatie-import maakt kosten-voorstel
+- [ ] **2g — KBC PDF-import + `transactie.soort`** (zie hieronder)
 - [ ] **polish** — admin-nav groeperen (14 items); owner-dashboard huurderafrekening tonen; PDF/print van de afrekening
 
 Elk blok = aparte migratie + commit, getest en gedeployed.
+
+---
+
+## Blok 2g — KBC-zichtrekening PDF verwerken
+
+Getest tegen een echte KBC "Export KBC Touch" PDF (VME Mooi Zicht, boekjaar
+31-10-2024 → 01-11-2025, 104 verrichtingen). Volledig parseerbaar: het
+eindsaldo klopt tot op de cent (3122,59 + −774,87 = 2347,72).
+
+Nodig om zo'n PDF 100% te verwerken:
+
+1. **PDF-parser** voor het KBC Touch-formaat. Blok per verrichting:
+   `DD-MM-YYYY<naam><bedrag>` + `Rekeningnummer/IBAN`, `BIC`, `Mededeling`,
+   evt. `Referte schuldeiser` + `Mandaatreferte` (domiciliëring, géén IBAN),
+   `Tijdstip`, transactietype. Pagina-headers/-footers strippen.
+2. **`transactie.soort`** enum: `voorschot | afrekening | kost |
+   interne_overboeking | terugbetaling | overig`. Enkel `voorschot` telt mee
+   in de voorschot-matching. Import raadt de soort uit:
+   - mededeling bevat "VOORSCHOT" → voorschot
+   - mededeling bevat "AFREKENING"/"EINDAFREKENING" → afrekening (vorig boekjaar,
+     niet meetellen)
+   - tegenpartij_iban ∈ {`vme.iban`, `vme.iban_reserve`} → interne_overboeking
+   - tegenpartij_iban matcht een `bankrelatie` type leverancier → kost
+   - admin kan de soort altijd corrigeren
+3. **Auto interne overboeking**: transfers van/naar de spaarrekening
+   (bv. +26.000 "VOOR GEVELRENOVATIE") tellen niet als inkomen.
+4. **Import → kosten-voorstel**: uitgaande betaling naar een geconfigureerde
+   leverancier-IBAN → `kosten` met `status='voorstel'` +
+   `betaald_met_transactie_id`, admin bevestigt (samen met 2f).
+5. **`bankrelatie.mandaatreferte`**: matchen van domiciliëringen zonder IBAN
+   (bv. Eneco, mandaat 61000001597504).
+6. Persoon met meerdere rekeningen (voorschot-IBAN vs onkosten-IBAN): meerdere
+   `bankrelatie`-rijen, of extra `eigenaar_iban`/`huurder_iban`-tabel. Voor nu:
+   losse bankrelatie-rijen volstaan.
+
+### Wat de testdata leert over het model
+
+| Rol | Voorbeeld | IBAN | Patroon |
+|---|---|---|---|
+| Eigenaar-voorschot | VRANCKEN JO | BE52 7353 1720 1809 | €157,50/mnd "VOORSCHOT GEMEENSCHAPPELIJKE KOSTEN" |
+| Eigenaar-voorschot | MACHIELS MANDY | BE61 0636 7074 3517 | €150 → €200/mnd (verhoogd op AV) |
+| Eigenaar-voorschot | PATRICK CROUGHS | BE81 9730 9032 5424 | €170 → €100/mnd + EINDAFREKENING (verkocht mid-boekjaar) |
+| Huurder | STEVENS WESLEY | BE39 7350 2427 2519 | €300/mnd, mededeling = maandnaam |
+| Vorig-jaar afrekening | −1194,17 / −231,41 / +417,36 | — | "AFREKENING 2024" — niet meetellen in 2024-2025 |
+| Interne overboeking | van reservefonds | BE84 7450 5726 7859 (= `vme.iban_reserve`) | +26.000 + +1.210 om grote facturen te dekken |
+| Leverancier water | WATERGROEP / VMW HOOFDDIRECTIE | BE90 0969 2800 0132 | 2 namen, 1 IBAN; terugbetaling via andere IBAN |
+| Leverancier elektr. | ENI GAS EN POWER + Eneco (domiciliëring) | BE50 0018 1567 6918 / geen | domiciliëring heeft enkel mandaatreferte |
+| Leverancier mazout | KOEN VOETS MAZOUT | BE45 1030 5132 4889 | "FAKTUUR 252127" |
+| Grote werken | GEVELCO | BE81 0014 5246 1024 | −25.996,24 gevelrenovatie, uit reservefonds |
+| Schoonmaak | VRANCKEN (JO/ELS) | BE73 2300 0483 4660 | "POETS <maanden>" + materiaal |
+| Syndicus | TIMMERMANS JAN | BE33 7353 1702 1246 | €40/mnd "SYNDIC <maand>" |
+| Bankkosten | Verbruik/Bijdrage KBC | geen IBAN | −250 + −28,50 |
