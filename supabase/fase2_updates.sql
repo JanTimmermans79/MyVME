@@ -1,4 +1,8 @@
-﻿-- MyVME - Fase 2 updates (2a t/m 2g). Veilig meermaals te draaien.
+﻿-- =============================================================================
+-- MyVME - Fase 2 updates (blokken 2a t/m 2g).
+-- VEILIG OM MEERMAALS TE DRAAIEN (create ... if not exists, drop policy if exists).
+-- Draai dit op een database die Fase 1 + de VME-bankrekeningen-migratie al heeft.
+-- =============================================================================
 
 -- >>> supabase/migrations/20260828110000_iban_matching.sql
 
@@ -60,7 +64,7 @@ drop view if exists public.unit_saldo;
 drop function if exists public.bereken_verschuldigd_voorschotten(uuid, text, date);
 drop table if exists public.voorschot;
 
-create table public.voorschot_eigenaar (
+create table if not exists public.voorschot_eigenaar (
   id               uuid primary key default gen_random_uuid(),
   unit_id          uuid not null references public.unit(id) on delete cascade,
   boekjaar_id      uuid not null references public.boekjaar(id) on delete cascade,
@@ -68,9 +72,9 @@ create table public.voorschot_eigenaar (
   created_at       timestamptz not null default now(),
   unique (unit_id, boekjaar_id)
 );
-create index voorschot_eigenaar_boekjaar_idx on public.voorschot_eigenaar(boekjaar_id);
+create index if not exists voorschot_eigenaar_boekjaar_idx on public.voorschot_eigenaar(boekjaar_id);
 
-create table public.voorschot_huurder (
+create table if not exists public.voorschot_huurder (
   id               uuid primary key default gen_random_uuid(),
   huurder_id       uuid not null references public.huurder(id) on delete cascade,
   boekjaar_id      uuid not null references public.boekjaar(id) on delete cascade,
@@ -78,7 +82,7 @@ create table public.voorschot_huurder (
   created_at       timestamptz not null default now(),
   unique (huurder_id, boekjaar_id)
 );
-create index voorschot_huurder_boekjaar_idx on public.voorschot_huurder(boekjaar_id);
+create index if not exists voorschot_huurder_boekjaar_idx on public.voorschot_huurder(boekjaar_id);
 
 -- --- RLS --------------------------------------------------------------------
 grant select, insert, update, delete on
@@ -89,18 +93,24 @@ alter table public.bankrelatie        enable row level security;
 alter table public.voorschot_eigenaar enable row level security;
 alter table public.voorschot_huurder  enable row level security;
 
+drop policy if exists bankrelatie_admin_all on public.bankrelatie;
 create policy bankrelatie_admin_all on public.bankrelatie
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists bankrelatie_select_eigenaar on public.bankrelatie;
 create policy bankrelatie_select_eigenaar on public.bankrelatie
   for select to authenticated using (public.owns_vme(vme_id));
 
+drop policy if exists vse_admin_all on public.voorschot_eigenaar;
 create policy vse_admin_all on public.voorschot_eigenaar
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists vse_select_eigenaar on public.voorschot_eigenaar;
 create policy vse_select_eigenaar on public.voorschot_eigenaar
   for select to authenticated using (public.owns_unit(unit_id));
 
+drop policy if exists vsh_admin_all on public.voorschot_huurder;
 create policy vsh_admin_all on public.voorschot_huurder
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists vsh_select_eigenaar on public.voorschot_huurder;
 create policy vsh_select_eigenaar on public.voorschot_huurder
   for select to authenticated using (
     exists (
@@ -197,13 +207,17 @@ alter table public.meterstand     enable row level security;
 alter table public.eenheidsprijs  enable row level security;
 alter table public.afrekening_lijn enable row level security;
 
+drop policy if exists teller_admin_all on public.teller;
 create policy teller_admin_all on public.teller
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists teller_select_eigenaar on public.teller;
 create policy teller_select_eigenaar on public.teller
   for select to authenticated using (public.owns_unit(unit_id));
 
+drop policy if exists meterstand_admin_all on public.meterstand;
 create policy meterstand_admin_all on public.meterstand
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists meterstand_select_eigenaar on public.meterstand;
 create policy meterstand_select_eigenaar on public.meterstand
   for select to authenticated using (
     exists (
@@ -212,13 +226,17 @@ create policy meterstand_select_eigenaar on public.meterstand
     )
   );
 
+drop policy if exists eenheidsprijs_admin_all on public.eenheidsprijs;
 create policy eenheidsprijs_admin_all on public.eenheidsprijs
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists eenheidsprijs_select_eigenaar on public.eenheidsprijs;
 create policy eenheidsprijs_select_eigenaar on public.eenheidsprijs
   for select to authenticated using (public.owns_vme(vme_id));
 
+drop policy if exists afrekening_lijn_admin_all on public.afrekening_lijn;
 create policy afrekening_lijn_admin_all on public.afrekening_lijn
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists afrekening_lijn_select_eigenaar on public.afrekening_lijn;
 create policy afrekening_lijn_select_eigenaar on public.afrekening_lijn
   for select to authenticated using (
     exists (

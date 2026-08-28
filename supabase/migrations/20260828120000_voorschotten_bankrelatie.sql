@@ -30,7 +30,7 @@ drop view if exists public.unit_saldo;
 drop function if exists public.bereken_verschuldigd_voorschotten(uuid, text, date);
 drop table if exists public.voorschot;
 
-create table public.voorschot_eigenaar (
+create table if not exists public.voorschot_eigenaar (
   id               uuid primary key default gen_random_uuid(),
   unit_id          uuid not null references public.unit(id) on delete cascade,
   boekjaar_id      uuid not null references public.boekjaar(id) on delete cascade,
@@ -38,9 +38,9 @@ create table public.voorschot_eigenaar (
   created_at       timestamptz not null default now(),
   unique (unit_id, boekjaar_id)
 );
-create index voorschot_eigenaar_boekjaar_idx on public.voorschot_eigenaar(boekjaar_id);
+create index if not exists voorschot_eigenaar_boekjaar_idx on public.voorschot_eigenaar(boekjaar_id);
 
-create table public.voorschot_huurder (
+create table if not exists public.voorschot_huurder (
   id               uuid primary key default gen_random_uuid(),
   huurder_id       uuid not null references public.huurder(id) on delete cascade,
   boekjaar_id      uuid not null references public.boekjaar(id) on delete cascade,
@@ -48,7 +48,7 @@ create table public.voorschot_huurder (
   created_at       timestamptz not null default now(),
   unique (huurder_id, boekjaar_id)
 );
-create index voorschot_huurder_boekjaar_idx on public.voorschot_huurder(boekjaar_id);
+create index if not exists voorschot_huurder_boekjaar_idx on public.voorschot_huurder(boekjaar_id);
 
 -- --- RLS --------------------------------------------------------------------
 grant select, insert, update, delete on
@@ -59,18 +59,24 @@ alter table public.bankrelatie        enable row level security;
 alter table public.voorschot_eigenaar enable row level security;
 alter table public.voorschot_huurder  enable row level security;
 
+drop policy if exists bankrelatie_admin_all on public.bankrelatie;
 create policy bankrelatie_admin_all on public.bankrelatie
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists bankrelatie_select_eigenaar on public.bankrelatie;
 create policy bankrelatie_select_eigenaar on public.bankrelatie
   for select to authenticated using (public.owns_vme(vme_id));
 
+drop policy if exists vse_admin_all on public.voorschot_eigenaar;
 create policy vse_admin_all on public.voorschot_eigenaar
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists vse_select_eigenaar on public.voorschot_eigenaar;
 create policy vse_select_eigenaar on public.voorschot_eigenaar
   for select to authenticated using (public.owns_unit(unit_id));
 
+drop policy if exists vsh_admin_all on public.voorschot_huurder;
 create policy vsh_admin_all on public.voorschot_huurder
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists vsh_select_eigenaar on public.voorschot_huurder;
 create policy vsh_select_eigenaar on public.voorschot_huurder
   for select to authenticated using (
     exists (

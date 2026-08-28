@@ -83,13 +83,17 @@ alter table public.meterstand     enable row level security;
 alter table public.eenheidsprijs  enable row level security;
 alter table public.afrekening_lijn enable row level security;
 
+drop policy if exists teller_admin_all on public.teller;
 create policy teller_admin_all on public.teller
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists teller_select_eigenaar on public.teller;
 create policy teller_select_eigenaar on public.teller
   for select to authenticated using (public.owns_unit(unit_id));
 
+drop policy if exists meterstand_admin_all on public.meterstand;
 create policy meterstand_admin_all on public.meterstand
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists meterstand_select_eigenaar on public.meterstand;
 create policy meterstand_select_eigenaar on public.meterstand
   for select to authenticated using (
     exists (
@@ -98,13 +102,17 @@ create policy meterstand_select_eigenaar on public.meterstand
     )
   );
 
+drop policy if exists eenheidsprijs_admin_all on public.eenheidsprijs;
 create policy eenheidsprijs_admin_all on public.eenheidsprijs
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists eenheidsprijs_select_eigenaar on public.eenheidsprijs;
 create policy eenheidsprijs_select_eigenaar on public.eenheidsprijs
   for select to authenticated using (public.owns_vme(vme_id));
 
+drop policy if exists afrekening_lijn_admin_all on public.afrekening_lijn;
 create policy afrekening_lijn_admin_all on public.afrekening_lijn
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists afrekening_lijn_select_eigenaar on public.afrekening_lijn;
 create policy afrekening_lijn_select_eigenaar on public.afrekening_lijn
   for select to authenticated using (
     exists (
