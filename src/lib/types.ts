@@ -122,6 +122,7 @@ export interface Kosten {
   document_url: string | null;
   verdeelsleutel_id: string | null;
   betaler_type: BetalerType;
+  betaald_met_transactie_id: string | null;
   bron: KostenBron;
   status: KostenStatus;
   created_at: string;
@@ -179,10 +180,53 @@ export interface VoorschotHuurder {
   created_at: string;
 }
 
+export type TellerType = "warm_water" | "koud_water" | "cv";
+export type MeterstandAanleiding =
+  | "boekjaareinde"
+  | "huurderwissel"
+  | "tussentijds";
+
+export interface Teller {
+  id: string;
+  unit_id: string;
+  type: TellerType;
+  meternummer: string | null;
+  created_at: string;
+}
+
+export interface Meterstand {
+  id: string;
+  teller_id: string;
+  datum: string;
+  waarde: number;
+  aanleiding: MeterstandAanleiding;
+  huurder_id: string | null;
+  created_at: string;
+}
+
+export interface Eenheidsprijs {
+  id: string;
+  vme_id: string;
+  boekjaar_id: string;
+  prijs_water_per_m3: number;
+  mazoutprijs_per_liter: number;
+  cv_liter_per_m3: number;
+  warmwater_liter_per_m3: number;
+  created_at: string;
+}
+
+export const EENHEIDSPRIJS_DEFAULTS = {
+  prijs_water_per_m3: 6.51,
+  mazoutprijs_per_liter: 0.81,
+  cv_liter_per_m3: 0.2,
+  warmwater_liter_per_m3: 1.0,
+} as const;
+
 export interface Afrekening {
   id: string;
   boekjaar_id: string;
   unit_id: string;
+  huurder_id: string | null;
   betaler_type: BetalerType;
   verschuldigd: number;
   ontvangen: number;
@@ -191,5 +235,17 @@ export interface Afrekening {
   mail_status: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface AfrekeningLijn {
+  id: string;
+  afrekening_id: string;
+  soort: string;
+  omschrijving: string;
+  hoeveelheid: number | null;
+  eenheid: string | null;
+  eenheidsprijs: number | null;
+  bedrag: number;
+  created_at: string;
 }
 

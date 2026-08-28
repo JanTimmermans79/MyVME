@@ -14,6 +14,7 @@ const NAV: NavItem[] = [
   { href: "/admin/huurders", label: "Huurders" },
   { href: "/admin/kosten", label: "Kosten" },
   { href: "/admin/mazout", label: "Mazout" },
+  { href: "/admin/tellers", label: "Tellers" },
   { href: "/admin/voorschotten", label: "Voorschotten" },
   { href: "/admin/bank", label: "Bankimport" },
   { href: "/admin/bankrelaties", label: "Bankrelaties" },
