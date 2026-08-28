@@ -8,7 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 type Db = ReturnType<typeof createAdminClient>;
 
-async function eigenaarKandidaten(db: Db, vmeId: string): Promise<Kandidaat[]> {
+async function matchKandidaten(db: Db, vmeId: string): Promise<Kandidaat[]> {
   const { data: units } = await db
     .from("unit")
     .select("id")
@@ -16,23 +16,34 @@ async function eigenaarKandidaten(db: Db, vmeId: string): Promise<Kandidaat[]> {
   const unitIds = (units ?? []).map((u: { id: string }) => u.id);
   if (unitIds.length === 0) return [];
 
-  const { data } = await db
-    .from("eigenaar")
-    .select("unit_id, naam, structuurcode_prefix")
-    .in("unit_id", unitIds);
+  const [{ data: eigenaars }, { data: huurders }] = await Promise.all([
+    db
+      .from("eigenaar")
+      .select("unit_id, naam, iban, structuurcode_prefix")
+      .in("unit_id", unitIds),
+    db.from("huurder").select("unit_id, naam, voornaam, iban").in("unit_id", unitIds),
+  ]);
 
-  return (data ?? []).map(
-    (e: {
-      unit_id: string;
-      naam: string;
-      structuurcode_prefix: string | null;
-    }) => ({
+  const list: Kandidaat[] = [];
+  for (const e of eigenaars ?? []) {
+    list.push({
       unit_id: e.unit_id,
       naam: e.naam,
-      structuurcode_prefix: e.structuurcode_prefix,
-      betaler_type: "eigenaar" as const,
-    }),
-  );
+      iban: e.iban ?? null,
+      structuurcode_prefix: e.structuurcode_prefix ?? null,
+      betaler_type: "eigenaar",
+    });
+  }
+  for (const h of huurders ?? []) {
+    list.push({
+      unit_id: h.unit_id,
+      naam: [h.voornaam, h.naam].filter(Boolean).join(" ") || h.naam,
+      iban: h.iban ?? null,
+      structuurcode_prefix: null,
+      betaler_type: "huurder",
+    });
+  }
+  return list;
 }
 
 export async function importTransacties(
@@ -63,7 +74,7 @@ export async function importTransacties(
       (bestaande ?? []).map((b: { import_hash: string }) => b.import_hash),
     );
 
-    const kandidaten = await eigenaarKandidaten(db, vme_id);
+    const kandidaten = await matchKandidaten(db, vme_id);
 
     const nieuw = rows
       .filter((r) => !bekend.has(r.import_hash))
@@ -73,12 +84,16 @@ export async function importTransacties(
           arr.findIndex((x) => x.import_hash === r.import_hash) === i,
       )
       .map((r) => {
-        const m = autoMatch(r.mededeling, kandidaten);
+        const m = autoMatch(
+          { tegenpartij_iban: r.tegenpartij_iban, mededeling: r.mededeling },
+          kandidaten,
+        );
         return {
           vme_id,
           datum: r.datum,
           bedrag: r.bedrag,
           tegenpartij_naam: r.tegenpartij_naam,
+          tegenpartij_iban: r.tegenpartij_iban,
           mededeling: r.mededeling,
           bron: "xls" as const,
           import_hash: r.import_hash,

@@ -4,6 +4,7 @@ export type Veld =
   | "datum"
   | "bedrag"
   | "tegenpartij_naam"
+  | "tegenpartij_iban"
   | "mededeling"
   | "negeren";
 
@@ -15,8 +16,16 @@ export interface ParsedTx {
   datum: string; // YYYY-MM-DD
   bedrag: number;
   tegenpartij_naam: string | null;
+  tegenpartij_iban: string | null;
   mededeling: string | null;
   import_hash: string;
+}
+
+/** Normaliseert een IBAN: hoofdletters, geen spaties. */
+export function normIban(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const s = raw.replace(/\s+/g, "").toUpperCase();
+  return /^[A-Z]{2}\d{2}[A-Z0-9]{6,30}$/.test(s) ? s : null;
 }
 
 export interface Sheet {
@@ -55,7 +64,8 @@ export function parseWorkbook(data: ArrayBuffer): Sheet {
 const HINTS: Record<Exclude<Veld, "negeren">, RegExp> = {
   datum: /datum|date|boekingsdatum|valuta|uitvoering/i,
   bedrag: /bedrag|amount|montant|debet|credit/i,
-  tegenpartij_naam: /tegenpartij|naam|begunstigde|opdrachtgever|counterparty|name/i,
+  tegenpartij_iban: /iban|tegenrekening|rekening tegenpartij|counterparty.*(iban|account)|compte/i,
+  tegenpartij_naam: /tegenpartij|naam|begunstigde|opdrachtgever|counterparty|name|nom/i,
   mededeling: /mededeling|communicatie|communication|omschrijving|details|libell|referte|vrije/i,
 };
 
@@ -68,6 +78,7 @@ export function autoMap(columns: string[]): Mapping {
     for (const veld of [
       "datum",
       "bedrag",
+      "tegenpartij_iban",
       "tegenpartij_naam",
       "mededeling",
     ] as const) {
@@ -173,6 +184,10 @@ export function buildTransactions(sheet: Sheet, mapping: Mapping): BuildResult {
       cols.tegenpartij_naam !== undefined
         ? (row[cols.tegenpartij_naam] ?? "").trim() || null
         : null;
+    const tegenpartij_iban =
+      cols.tegenpartij_iban !== undefined
+        ? normIban(row[cols.tegenpartij_iban] ?? "")
+        : null;
     const mededeling =
       cols.mededeling !== undefined
         ? (row[cols.mededeling] ?? "").trim() || null
@@ -182,8 +197,15 @@ export function buildTransactions(sheet: Sheet, mapping: Mapping): BuildResult {
       datum,
       bedrag,
       tegenpartij_naam,
+      tegenpartij_iban,
       mededeling,
-      import_hash: importHash([datum, bedrag, tegenpartij_naam, mededeling]),
+      import_hash: importHash([
+        datum,
+        bedrag,
+        tegenpartij_naam,
+        tegenpartij_iban,
+        mededeling,
+      ]),
     });
   });
 

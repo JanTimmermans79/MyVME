@@ -83,9 +83,12 @@ export default async function ContactPage() {
                         className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm"
                       >
                         <div>
-                          <p className="font-medium">{h.naam}</p>
+                          <p className="font-medium">
+                            {[h.voornaam, h.naam].filter(Boolean).join(" ")}
+                          </p>
                           <p className="text-muted-foreground">
                             {h.email ?? "geen e-mail"} · {h.telefoon ?? "geen tel."}
+                            {h.iban ? ` · ${h.iban}` : ""}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {h.ingang_datum ? datum(h.ingang_datum) : "?"} –{" "}

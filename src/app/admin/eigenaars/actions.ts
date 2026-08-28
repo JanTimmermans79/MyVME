@@ -66,6 +66,7 @@ export async function createEigenaar(
       naam,
       email,
       telefoon: optStr(formData, "telefoon"),
+      iban: optStr(formData, "iban"),
       structuurcode_prefix: optStr(formData, "structuurcode_prefix"),
     });
     if (error) {
@@ -98,6 +99,7 @@ export async function updateEigenaar(
         naam,
         email: optStr(formData, "email"),
         telefoon: optStr(formData, "telefoon"),
+        iban: optStr(formData, "iban"),
         structuurcode_prefix: optStr(formData, "structuurcode_prefix"),
       })
       .eq("id", id);

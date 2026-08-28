@@ -56,6 +56,12 @@ export function CreateEigenaarForm({ units }: { units: Unit[] }) {
       <Field label="E-mail" name="email" type="email" required />
       <Field label="Telefoon" name="telefoon" />
       <Field
+        label="Rekeningnummer (IBAN)"
+        name="iban"
+        placeholder="BE.."
+        hint="Voor het automatisch matchen van voorschotten uit de bankimport."
+      />
+      <Field
         label="Structuurcode-prefix (bankmatching)"
         name="structuurcode_prefix"
         hint="Prefix in de gestructureerde mededeling, bv. 100 of +++100"
@@ -98,6 +104,11 @@ export function EditEigenaarDialog({ eigenaar }: { eigenaar: Eigenaar }) {
             label="Telefoon"
             name="telefoon"
             defaultValue={eigenaar.telefoon ?? ""}
+          />
+          <Field
+            label="Rekeningnummer (IBAN)"
+            name="iban"
+            defaultValue={eigenaar.iban ?? ""}
           />
           <Field
             label="Structuurcode-prefix"

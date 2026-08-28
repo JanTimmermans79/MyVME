@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { Pencil, Plus } from "lucide-react";
-import type { Eigenaar, Huurder, Unit } from "@/lib/types";
+import type { Huurder, Unit } from "@/lib/types";
 import { ActionForm } from "@/components/action-form";
 import { Field, SubmitButton } from "@/components/form";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -15,42 +16,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { updateEigenContact, upsertHuurder, deleteHuurder } from "../actions";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { createHuurder, updateHuurder, deleteHuurder } from "./actions";
 
-export function EigenContactForm({ eigenaar }: { eigenaar: Eigenaar }) {
-  return (
-    <ActionForm
-      action={updateEigenContact}
-      hiddenFields={{ id: eigenaar.id }}
-      className="grid gap-3 sm:grid-cols-3"
-    >
-      <Field label="Naam" name="naam" required defaultValue={eigenaar.naam} />
-      <Field
-        label="E-mail"
-        name="email"
-        type="email"
-        defaultValue={eigenaar.email ?? ""}
-      />
-      <Field
-        label="Telefoon"
-        name="telefoon"
-        defaultValue={eigenaar.telefoon ?? ""}
-      />
-      <div className="sm:col-span-3">
-        <SubmitButton>Opslaan</SubmitButton>
-      </div>
-    </ActionForm>
-  );
-}
-
-function HuurderFields({ huurder }: { huurder?: Huurder }) {
+function Fields({ huurder }: { huurder?: Huurder }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Field
-        label="Voornaam"
-        name="voornaam"
-        defaultValue={huurder?.voornaam ?? ""}
-      />
+      <Field label="Voornaam" name="voornaam" defaultValue={huurder?.voornaam ?? ""} />
       <Field label="Naam" name="naam" required defaultValue={huurder?.naam ?? ""} />
       <Field
         label="E-mail"
@@ -58,11 +36,7 @@ function HuurderFields({ huurder }: { huurder?: Huurder }) {
         type="email"
         defaultValue={huurder?.email ?? ""}
       />
-      <Field
-        label="Telefoon"
-        name="telefoon"
-        defaultValue={huurder?.telefoon ?? ""}
-      />
+      <Field label="Telefoon" name="telefoon" defaultValue={huurder?.telefoon ?? ""} />
       <Field
         label="Rekeningnummer (IBAN)"
         name="iban"
@@ -86,26 +60,40 @@ function HuurderFields({ huurder }: { huurder?: Huurder }) {
   );
 }
 
-export function AddHuurderDialog({ unit }: { unit: Unit }) {
+export function AddHuurderDialog({ units }: { units: Unit[] }) {
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
+        <Button size="sm">
           <Plus className="size-3.5" /> Huurder toevoegen
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Huurder toevoegen — {unit.naam}</DialogTitle>
+          <DialogTitle>Nieuwe huurder</DialogTitle>
         </DialogHeader>
         <ActionForm
-          action={upsertHuurder}
-          hiddenFields={{ unit_id: unit.id }}
+          action={createHuurder}
           onSuccess={() => setOpen(false)}
           className="space-y-3"
         >
-          <HuurderFields />
+          <div className="space-y-1.5">
+            <Label htmlFor="unit_id">Appartement</Label>
+            <Select name="unit_id" required>
+              <SelectTrigger id="unit_id" className="w-full">
+                <SelectValue placeholder="Kies appartement" />
+              </SelectTrigger>
+              <SelectContent>
+                {units.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.naam}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Fields />
           <DialogFooter>
             <SubmitButton>Toevoegen</SubmitButton>
           </DialogFooter>
@@ -120,7 +108,7 @@ export function EditHuurderDialog({ huurder }: { huurder: Huurder }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
+        <Button variant="outline" size="sm">
           <Pencil className="size-3.5" /> Bewerken
         </Button>
       </DialogTrigger>
@@ -129,12 +117,12 @@ export function EditHuurderDialog({ huurder }: { huurder: Huurder }) {
           <DialogTitle>Huurder bewerken</DialogTitle>
         </DialogHeader>
         <ActionForm
-          action={upsertHuurder}
-          hiddenFields={{ id: huurder.id, unit_id: huurder.unit_id }}
+          action={updateHuurder}
+          hiddenFields={{ id: huurder.id }}
           onSuccess={() => setOpen(false)}
           className="space-y-3"
         >
-          <HuurderFields huurder={huurder} />
+          <Fields huurder={huurder} />
           <DialogFooter>
             <SubmitButton>Opslaan</SubmitButton>
           </DialogFooter>
@@ -145,7 +133,9 @@ export function EditHuurderDialog({ huurder }: { huurder: Huurder }) {
             hiddenFields={{ id: huurder.id }}
             onSuccess={() => setOpen(false)}
           >
-            <ConfirmSubmit message={`Huurder "${huurder.naam}" verwijderen?`} />
+            <ConfirmSubmit
+              message={`Huurder "${[huurder.voornaam, huurder.naam].filter(Boolean).join(" ")}" verwijderen?`}
+            />
           </ActionForm>
         </div>
       </DialogContent>

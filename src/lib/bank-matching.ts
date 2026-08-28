@@ -49,6 +49,7 @@ export interface Kandidaat {
   unit_id: string;
   betaler_type: BetalerType;
   naam: string;
+  iban: string | null;
   structuurcode_prefix: string | null;
 }
 
@@ -56,27 +57,52 @@ export interface MatchUitkomst {
   gematchte_unit_id: string | null;
   betaler_type: BetalerType | null;
   match_type: "automatisch" | "onbevestigd";
+  reden?: "iban" | "structuurcode";
 }
 
-/** Automatische match op structuurcode. Geen naam-match hier (dat is een suggestie). */
+const ONBEVESTIGD: MatchUitkomst = {
+  gematchte_unit_id: null,
+  betaler_type: null,
+  match_type: "onbevestigd",
+};
+
+function normIbanLoose(raw: string | null): string | null {
+  if (!raw) return null;
+  const s = raw.replace(/\s+/g, "").toUpperCase();
+  return s.length >= 8 ? s : null;
+}
+
+/**
+ * Automatische match: eerst op IBAN van de tegenpartij, dan op de
+ * structuurcode-prefix. Naamgelijkenis is een suggestie, geen auto-match.
+ */
 export function autoMatch(
-  mededeling: string | null,
+  tx: { tegenpartij_iban: string | null; mededeling: string | null },
   kandidaten: Kandidaat[],
 ): MatchUitkomst {
+  const txIban = normIbanLoose(tx.tegenpartij_iban);
+  if (txIban) {
+    const hit = kandidaten.find((k) => normIbanLoose(k.iban) === txIban);
+    if (hit)
+      return {
+        gematchte_unit_id: hit.unit_id,
+        betaler_type: hit.betaler_type,
+        match_type: "automatisch",
+        reden: "iban",
+      };
+  }
+
   for (const k of kandidaten) {
-    if (structuurMatch(mededeling, k.structuurcode_prefix)) {
+    if (structuurMatch(tx.mededeling, k.structuurcode_prefix)) {
       return {
         gematchte_unit_id: k.unit_id,
         betaler_type: k.betaler_type,
         match_type: "automatisch",
+        reden: "structuurcode",
       };
     }
   }
-  return {
-    gematchte_unit_id: null,
-    betaler_type: null,
-    match_type: "onbevestigd",
-  };
+  return ONBEVESTIGD;
 }
 
 export interface Suggestie {

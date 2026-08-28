@@ -63,6 +63,7 @@ export interface Eigenaar {
   naam: string;
   email: string | null;
   telefoon: string | null;
+  iban: string | null;
   structuurcode_prefix: string | null;
   created_at: string;
 }
@@ -71,8 +72,10 @@ export interface Huurder {
   id: string;
   unit_id: string;
   naam: string;
+  voornaam: string | null;
   email: string | null;
   telefoon: string | null;
+  iban: string | null;
   ingang_datum: string | null;
   uitgang_datum: string | null;
   created_at: string;
@@ -135,6 +138,7 @@ export interface Transactie {
   datum: string;
   bedrag: number;
   tegenpartij_naam: string | null;
+  tegenpartij_iban: string | null;
   mededeling: string | null;
   bron: TransactieBron;
   import_hash: string;

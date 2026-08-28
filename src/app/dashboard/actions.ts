@@ -49,8 +49,10 @@ export async function upsertHuurder(
     const payload = {
       unit_id,
       naam,
+      voornaam: optStr(formData, "voornaam"),
       email: optStr(formData, "email"),
       telefoon: optStr(formData, "telefoon"),
+      iban: optStr(formData, "iban"),
       ingang_datum: optStr(formData, "ingang_datum"),
       uitgang_datum: optStr(formData, "uitgang_datum"),
     };

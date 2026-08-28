@@ -35,7 +35,8 @@ import {
 const VELDEN: { value: Veld; label: string }[] = [
   { value: "datum", label: "Datum" },
   { value: "bedrag", label: "Bedrag" },
-  { value: "tegenpartij_naam", label: "Tegenpartij" },
+  { value: "tegenpartij_naam", label: "Tegenpartij (naam)" },
+  { value: "tegenpartij_iban", label: "Tegenpartij (IBAN)" },
   { value: "mededeling", label: "Mededeling" },
   { value: "negeren", label: "— negeren —" },
 ];
@@ -152,6 +153,7 @@ export function BankImporter({ vmeId }: { vmeId: string }) {
                         <TableHead>Datum</TableHead>
                         <TableHead className="text-right">Bedrag</TableHead>
                         <TableHead>Tegenpartij</TableHead>
+                        <TableHead>IBAN</TableHead>
                         <TableHead>Mededeling</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -163,6 +165,9 @@ export function BankImporter({ vmeId }: { vmeId: string }) {
                             {euro(t.bedrag)}
                           </TableCell>
                           <TableCell>{t.tegenpartij_naam ?? "—"}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {t.tegenpartij_iban ?? "—"}
+                          </TableCell>
                           <TableCell className="max-w-xs truncate">
                             {t.mededeling ?? "—"}
                           </TableCell>

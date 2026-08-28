@@ -66,12 +66,14 @@ export default async function BankPage() {
     ...(eigenaars ?? []).map((e) => ({
       unit_id: e.unit_id,
       naam: e.naam,
+      iban: e.iban ?? null,
       structuurcode_prefix: e.structuurcode_prefix,
       betaler_type: "eigenaar" as const,
     })),
     ...(huurders ?? []).map((h) => ({
       unit_id: h.unit_id,
-      naam: h.naam,
+      naam: [h.voornaam, h.naam].filter(Boolean).join(" ") || h.naam,
+      iban: h.iban ?? null,
       structuurcode_prefix: null,
       betaler_type: "huurder" as const,
     })),
