@@ -327,6 +327,19 @@ alter table public.bankrelatie
 -- of naam herkend)
 alter table public.bankrelatie alter column iban drop not null;
 
+-- bestaande bankrelaties een verdeling geven op basis van de oude betaler/categorie
+update public.bankrelatie set standaard_verdeling = case
+  when standaard_betaler_type = 'huurder'
+       and lower(coalesce(standaard_categorie,'')) in
+         ('koud water','warm water','koud_water','warm_water','mazout','stookolie')
+    then 'individueel_verbruik'
+  when standaard_betaler_type = 'huurder' then 'gelijk_huurders'
+  when standaard_verdeelsleutel_id is not null then 'per_quotiteit'
+  when standaard_betaler_type = 'eigenaar' then 'gelijk_eigenaars'
+  else null
+end
+where standaard_verdeling is null;
+
 comment on column public.kosten.verdeling is 'Hoe deze kost verdeeld wordt in de afrekening';
 comment on column public.bankrelatie.naam_bevat is 'Herken de tegenpartij aan een deel van de naam (geen IBAN nodig)';
 
