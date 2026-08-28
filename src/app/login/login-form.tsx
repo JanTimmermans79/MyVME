@@ -72,7 +72,8 @@ export function LoginForm() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {hadError && (
               <p className="text-sm text-destructive">
-                Aanmelden mislukte. Probeer opnieuw.
+                Aanmelden mislukte
+                {hadError !== "auth" ? `: ${hadError}` : ""}. Probeer opnieuw.
               </p>
             )}
             <div className="space-y-2">
