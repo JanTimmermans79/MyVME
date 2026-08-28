@@ -96,8 +96,8 @@ onderhoud, diverse — opgeteld uit de bankimport per categorie.
 - [x] **2d** — tellers + meterstanden + eenheidsprijzen
 - [x] **2e** — verbruiksberekening + `afrekening_lijn` + pro-rata + huurder-detail + mailen
 - [ ] **2f** — factuur-upload ↔ uitgaande betaling matchen; bankrelatie-import maakt kosten-voorstel
-- [ ] **2g — KBC PDF-import + `transactie.soort`** (zie hieronder)
-- [ ] **polish** — admin-nav groeperen (14 items); owner-dashboard huurderafrekening tonen; PDF/print van de afrekening
+- [x] **2g — KBC PDF-import + `transactie.soort`/`rekening` + voorschotcontrole** (migr. 20260828140000). Parser getest tegen echte zicht- + spaarrekening, saldo klopt.
+- [ ] **polish** — admin-nav groeperen (15 items); owner-dashboard huurderafrekening tonen; PDF/print van de afrekening; reconciliatie totaal water/mazout (bankfactuur vs som meterverbruik)
 
 Elk blok = aparte migratie + commit, getest en gedeployed.
 
@@ -134,6 +134,22 @@ Nodig om zo'n PDF 100% te verwerken:
 6. Persoon met meerdere rekeningen (voorschot-IBAN vs onkosten-IBAN): meerdere
    `bankrelatie`-rijen, of extra `eigenaar_iban`/`huurder_iban`-tabel. Voor nu:
    losse bankrelatie-rijen volstaan.
+
+### Twee-rekeningenmodel (bevestigd via de spaarrekening-PDF)
+
+- **Zichtrekening** (`vme.iban`): bewoners storten hier hun *voorschot
+  gemeenschappelijke kosten* (huurders + eigenaar-bewoners). Leveranciers worden
+  hiervan betaald. **Geen huurgelden** — die gaan rechtstreeks naar de eigenaars.
+- **Spaarrekening** (`vme.iban_reserve`): elke eigenaar stort hier zijn
+  *maandelijkse reservefonds-provisie* (bv. €200), 12× per boekjaar. Grote werken
+  worden hiervan betaald; eenmalige bijdragen = `soort='kapitaalsoproep'`.
+- Een **eigenaar-bewoner** (bv. Jo Vrancken) betaalt béide: reservefonds op de
+  spaarrekening + voorschot gemeenschappelijke kosten op de zichtrekening. Hij
+  wordt in de jaarafrekening als bewoner behandeld (verbruik + gedeelde kosten),
+  maar betaalt geen huur. Modelleer hem als eigenaar én als huurder van de eigen
+  unit met dezelfde IBAN — de `rekening` van de verrichting maakt het onderscheid.
+- De import zet `soort='afrekening'` op "AFREKENING 2024"-betalingen (settlement
+  vorig boekjaar) → tellen niet mee.
 
 ### Wat de testdata leert over het model
 
