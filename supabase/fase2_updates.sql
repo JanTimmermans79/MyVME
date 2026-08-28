@@ -1,0 +1,234 @@
+﻿-- =============================================================================
+-- MyVME - Fase 2 updates (blokken 2a t/m 2e)
+-- Plak in de Supabase SQL Editor en klik Run. Veilig om meermaals te draaien.
+-- Draai dit op een database die de Fase 1 + VME-bankrekeningen-migraties al heeft.
+-- =============================================================================
+
+-- >>> supabase/migrations/20260828110000_iban_matching.sql
+
+-- =============================================================================
+-- Fase 2a: rekeningnummers op huurder/eigenaar + tegenpartij-IBAN op transactie
+-- Basis voor IBAN-gebaseerde bankmatching en pro-rata huurdersafrekening.
+-- =============================================================================
+
+alter table public.huurder
+  add column if not exists voornaam text,
+  add column if not exists iban     text;
+
+alter table public.eigenaar
+  add column if not exists iban text;
+
+alter table public.transactie
+  add column if not exists tegenpartij_iban text;
+
+comment on column public.huurder.voornaam is 'Voornaam van de huurder';
+comment on column public.huurder.iban is 'Rekeningnummer van de huurder (bankmatching)';
+comment on column public.eigenaar.iban is 'Rekeningnummer van de eigenaar (bankmatching)';
+comment on column public.transactie.tegenpartij_iban is 'IBAN van de tegenpartij uit de bankexport';
+
+create index if not exists transactie_tegenpartij_iban_idx
+  on public.transactie (tegenpartij_iban);
+
+
+-- >>> supabase/migrations/20260828120000_voorschotten_bankrelatie.sql
+
+-- =============================================================================
+-- Fase 2b/2c: voorschotten per boekjaar + configureerbare bankrelaties
+-- =============================================================================
+
+-- --- eigenaar: voornaam apart -------------------------------------------------
+alter table public.eigenaar add column if not exists voornaam text;
+comment on column public.eigenaar.voornaam is 'Voornaam van de eigenaar';
+
+-- --- bankrelatie: configureerbare tegenpartijen (Watergroep, mazout, ...) ----
+create table if not exists public.bankrelatie (
+  id                          uuid primary key default gen_random_uuid(),
+  vme_id                      uuid not null references public.vme(id) on delete cascade,
+  naam                        text not null,
+  iban                        text not null,
+  type                        text not null check (type in ('leverancier','eigen_rekening','overig')),
+  standaard_categorie         text,
+  standaard_verdeelsleutel_id uuid references public.verdeelsleutel(id) on delete set null,
+  standaard_betaler_type      text check (standaard_betaler_type in ('eigenaar','huurder')),
+  created_at                  timestamptz not null default now()
+);
+create index if not exists bankrelatie_vme_idx on public.bankrelatie(vme_id);
+create unique index if not exists bankrelatie_vme_iban_idx
+  on public.bankrelatie(vme_id, iban);
+
+-- --- voorschotten herwerken -------------------------------------------------
+-- Oud model (Ã©Ã©n lopende voorschot-tabel + lopend-saldo-view) verdwijnt.
+-- Nieuw: eigenaars per unit per boekjaar (AV-beslissing),
+--        huurders per huurder per boekjaar (variabel).
+drop view if exists public.unit_saldo;
+drop function if exists public.bereken_verschuldigd_voorschotten(uuid, text, date);
+drop table if exists public.voorschot;
+
+create table public.voorschot_eigenaar (
+  id               uuid primary key default gen_random_uuid(),
+  unit_id          uuid not null references public.unit(id) on delete cascade,
+  boekjaar_id      uuid not null references public.boekjaar(id) on delete cascade,
+  bedrag_per_maand numeric(14,2) not null check (bedrag_per_maand >= 0),
+  created_at       timestamptz not null default now(),
+  unique (unit_id, boekjaar_id)
+);
+create index voorschot_eigenaar_boekjaar_idx on public.voorschot_eigenaar(boekjaar_id);
+
+create table public.voorschot_huurder (
+  id               uuid primary key default gen_random_uuid(),
+  huurder_id       uuid not null references public.huurder(id) on delete cascade,
+  boekjaar_id      uuid not null references public.boekjaar(id) on delete cascade,
+  bedrag_per_maand numeric(14,2) not null check (bedrag_per_maand >= 0),
+  created_at       timestamptz not null default now(),
+  unique (huurder_id, boekjaar_id)
+);
+create index voorschot_huurder_boekjaar_idx on public.voorschot_huurder(boekjaar_id);
+
+-- --- RLS --------------------------------------------------------------------
+grant select, insert, update, delete on
+  public.bankrelatie, public.voorschot_eigenaar, public.voorschot_huurder
+  to authenticated;
+
+alter table public.bankrelatie        enable row level security;
+alter table public.voorschot_eigenaar enable row level security;
+alter table public.voorschot_huurder  enable row level security;
+
+create policy bankrelatie_admin_all on public.bankrelatie
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy bankrelatie_select_eigenaar on public.bankrelatie
+  for select to authenticated using (public.owns_vme(vme_id));
+
+create policy vse_admin_all on public.voorschot_eigenaar
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy vse_select_eigenaar on public.voorschot_eigenaar
+  for select to authenticated using (public.owns_unit(unit_id));
+
+create policy vsh_admin_all on public.voorschot_huurder
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy vsh_select_eigenaar on public.voorschot_huurder
+  for select to authenticated using (
+    exists (
+      select 1 from public.huurder h
+      where h.id = huurder_id and public.owns_unit(h.unit_id)
+    )
+  );
+
+
+-- >>> supabase/migrations/20260828130000_tellers_prijzen.sql
+
+-- =============================================================================
+-- Fase 2d: tellers, meterstanden, eenheidsprijzen + afrekening-detail
+-- =============================================================================
+
+-- --- tellers: elk appartement heeft warm water, koud water en CV ------------
+create table if not exists public.teller (
+  id          uuid primary key default gen_random_uuid(),
+  unit_id     uuid not null references public.unit(id) on delete cascade,
+  type        text not null check (type in ('warm_water','koud_water','cv')),
+  meternummer text,
+  created_at  timestamptz not null default now(),
+  unique (unit_id, type)
+);
+create index if not exists teller_unit_idx on public.teller(unit_id);
+
+-- --- meterstanden ----------------------------------------------------------
+create table if not exists public.meterstand (
+  id         uuid primary key default gen_random_uuid(),
+  teller_id  uuid not null references public.teller(id) on delete cascade,
+  datum      date not null,
+  waarde     numeric(14,3) not null check (waarde >= 0),
+  aanleiding text not null default 'tussentijds'
+             check (aanleiding in ('boekjaareinde','huurderwissel','tussentijds')),
+  huurder_id uuid references public.huurder(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists meterstand_teller_datum_idx
+  on public.meterstand(teller_id, datum);
+
+-- --- eenheidsprijzen per VME + boekjaar ------------------------------------
+create table if not exists public.eenheidsprijs (
+  id                     uuid primary key default gen_random_uuid(),
+  vme_id                 uuid not null references public.vme(id) on delete cascade,
+  boekjaar_id            uuid not null references public.boekjaar(id) on delete cascade,
+  prijs_water_per_m3     numeric(14,4) not null default 6.51,
+  mazoutprijs_per_liter  numeric(14,4) not null default 0.81,
+  cv_liter_per_m3        numeric(14,4) not null default 0.20,
+  warmwater_liter_per_m3 numeric(14,4) not null default 1.00,
+  created_at             timestamptz not null default now(),
+  unique (vme_id, boekjaar_id)
+);
+
+-- --- afrekening: onderscheid per huurder + detailregels -------------------
+alter table public.afrekening
+  add column if not exists huurder_id uuid references public.huurder(id) on delete cascade;
+
+alter table public.afrekening
+  drop constraint if exists afrekening_boekjaar_id_unit_id_betaler_type_key;
+alter table public.afrekening
+  drop constraint if exists afrekening_uniek;
+
+-- NULLS NOT DISTINCT (PG15+): eigenaar-rijen hebben huurder_id = null en zijn
+-- toch uniek per (boekjaar, unit).
+alter table public.afrekening
+  add constraint afrekening_uniek
+  unique nulls not distinct (boekjaar_id, unit_id, betaler_type, huurder_id);
+
+create table if not exists public.afrekening_lijn (
+  id            uuid primary key default gen_random_uuid(),
+  afrekening_id uuid not null references public.afrekening(id) on delete cascade,
+  soort         text not null,      -- koud_water | warm_water | stookolie | gedeeld | overig
+  omschrijving  text not null,
+  hoeveelheid   numeric(14,3),
+  eenheid       text,
+  eenheidsprijs numeric(14,4),
+  bedrag        numeric(14,2) not null,
+  created_at    timestamptz not null default now()
+);
+create index if not exists afrekening_lijn_afr_idx on public.afrekening_lijn(afrekening_id);
+
+-- --- factuur <-> betaling (1 op 1) ---------------------------------------
+alter table public.kosten
+  add column if not exists betaald_met_transactie_id uuid
+  references public.transactie(id) on delete set null;
+
+-- --- RLS -----------------------------------------------------------------
+grant select, insert, update, delete on
+  public.teller, public.meterstand, public.eenheidsprijs, public.afrekening_lijn
+  to authenticated;
+
+alter table public.teller         enable row level security;
+alter table public.meterstand     enable row level security;
+alter table public.eenheidsprijs  enable row level security;
+alter table public.afrekening_lijn enable row level security;
+
+create policy teller_admin_all on public.teller
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy teller_select_eigenaar on public.teller
+  for select to authenticated using (public.owns_unit(unit_id));
+
+create policy meterstand_admin_all on public.meterstand
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy meterstand_select_eigenaar on public.meterstand
+  for select to authenticated using (
+    exists (
+      select 1 from public.teller t
+      where t.id = teller_id and public.owns_unit(t.unit_id)
+    )
+  );
+
+create policy eenheidsprijs_admin_all on public.eenheidsprijs
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy eenheidsprijs_select_eigenaar on public.eenheidsprijs
+  for select to authenticated using (public.owns_vme(vme_id));
+
+create policy afrekening_lijn_admin_all on public.afrekening_lijn
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy afrekening_lijn_select_eigenaar on public.afrekening_lijn
+  for select to authenticated using (
+    exists (
+      select 1 from public.afrekening a
+      where a.id = afrekening_id and public.owns_unit(a.unit_id)
+    )
+  );
+
+

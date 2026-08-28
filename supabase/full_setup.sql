@@ -1,6 +1,6 @@
 ﻿-- MyVME - VOLLEDIGE DATABASE-SETUP (alle migraties, voor een LEGE database)
 
--- >>> BRON: supabase/migrations/20260828090000_schema.sql
+-- >>> supabase/migrations/20260828090000_schema.sql
 
 -- =============================================================================
 -- MyVME - basis datamodel (multi-tenant: meerdere VME's per syndicus)
@@ -218,7 +218,7 @@ create index afrekening_unit_idx on public.afrekening(unit_id);
 create index afrekening_boekjaar_idx on public.afrekening(boekjaar_id);
 
 
--- >>> BRON: supabase/migrations/20260828090100_functions.sql
+-- >>> supabase/migrations/20260828090100_functions.sql
 
 -- =============================================================================
 -- Helper-functies (voor RLS) + saldo-berekening
@@ -388,7 +388,7 @@ create trigger afrekening_touch
   for each row execute function public.touch_updated_at();
 
 
--- >>> BRON: supabase/migrations/20260828090200_rls.sql
+-- >>> supabase/migrations/20260828090200_rls.sql
 
 -- =============================================================================
 -- Row Level Security. Verplicht vanaf de eerste migratie.
@@ -552,7 +552,7 @@ create policy afrekening_select_eigenaar on public.afrekening
   for select to authenticated using (public.owns_unit(unit_id));
 
 
--- >>> BRON: supabase/migrations/20260828090300_storage.sql
+-- >>> supabase/migrations/20260828090300_storage.sql
 
 -- =============================================================================
 -- Storage: private bucket 'documenten' voor kostenbewijzen / facturen.
@@ -572,7 +572,7 @@ create policy "documenten_admin_all" on storage.objects
   with check (bucket_id = 'documenten' and public.is_admin());
 
 
--- >>> BRON: supabase/migrations/20260828100000_vme_bankrekeningen.sql
+-- >>> supabase/migrations/20260828100000_vme_bankrekeningen.sql
 
 -- =============================================================================
 -- VME: tweede bankrekening (spaarrekening / reservefonds) + aantal kavels
@@ -600,7 +600,7 @@ comment on column public.vme.aantal_kavels is
   'Aantal kavels/appartementen in de VME (informatief)';
 
 
--- >>> BRON: supabase/migrations/20260828110000_iban_matching.sql
+-- >>> supabase/migrations/20260828110000_iban_matching.sql
 
 -- =============================================================================
 -- Fase 2a: rekeningnummers op huurder/eigenaar + tegenpartij-IBAN op transactie
@@ -626,7 +626,7 @@ create index if not exists transactie_tegenpartij_iban_idx
   on public.transactie (tegenpartij_iban);
 
 
--- >>> BRON: supabase/migrations/20260828120000_voorschotten_bankrelatie.sql
+-- >>> supabase/migrations/20260828120000_voorschotten_bankrelatie.sql
 
 -- =============================================================================
 -- Fase 2b/2c: voorschotten per boekjaar + configureerbare bankrelaties
@@ -710,7 +710,7 @@ create policy vsh_select_eigenaar on public.voorschot_huurder
   );
 
 
--- >>> BRON: supabase/migrations/20260828130000_tellers_prijzen.sql
+-- >>> supabase/migrations/20260828130000_tellers_prijzen.sql
 
 -- =============================================================================
 -- Fase 2d: tellers, meterstanden, eenheidsprijzen + afrekening-detail
@@ -760,11 +760,14 @@ alter table public.afrekening
 
 alter table public.afrekening
   drop constraint if exists afrekening_boekjaar_id_unit_id_betaler_type_key;
+alter table public.afrekening
+  drop constraint if exists afrekening_uniek;
 
-create unique index if not exists afrekening_eigenaar_uniek
-  on public.afrekening (boekjaar_id, unit_id) where betaler_type = 'eigenaar';
-create unique index if not exists afrekening_huurder_uniek
-  on public.afrekening (boekjaar_id, huurder_id) where betaler_type = 'huurder';
+-- NULLS NOT DISTINCT (PG15+): eigenaar-rijen hebben huurder_id = null en zijn
+-- toch uniek per (boekjaar, unit).
+alter table public.afrekening
+  add constraint afrekening_uniek
+  unique nulls not distinct (boekjaar_id, unit_id, betaler_type, huurder_id);
 
 create table if not exists public.afrekening_lijn (
   id            uuid primary key default gen_random_uuid(),
