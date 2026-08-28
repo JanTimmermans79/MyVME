@@ -8,19 +8,45 @@ import {
   type ActionState,
 } from "@/lib/action-helpers";
 
+type VmeFields = {
+  naam: string;
+  adres: string | null;
+  iban: string | null;
+  iban_reserve: string | null;
+  aantal_kavels: number | null;
+};
+
+function parseVme(formData: FormData): VmeFields | { error: string } {
+  const naam = str(formData, "naam");
+  if (!naam) return { error: "Naam is verplicht." };
+
+  const aantalRaw = str(formData, "aantal_kavels");
+  let aantal_kavels: number | null = null;
+  if (aantalRaw) {
+    const n = Number.parseInt(aantalRaw, 10);
+    if (!Number.isFinite(n) || n < 0)
+      return { error: "Aantal appartementen moet een positief geheel getal zijn." };
+    aantal_kavels = n;
+  }
+
+  return {
+    naam,
+    adres: optStr(formData, "adres"),
+    iban: optStr(formData, "iban"),
+    iban_reserve: optStr(formData, "iban_reserve"),
+    aantal_kavels,
+  };
+}
+
 export async function createVme(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
   return runAdmin(async (db) => {
-    const naam = str(formData, "naam");
-    if (!naam) return { ok: false, error: "Naam is verplicht." };
+    const fields = parseVme(formData);
+    if ("error" in fields) return { ok: false, error: fields.error };
 
-    const { error } = await db.from("vme").insert({
-      naam,
-      adres: optStr(formData, "adres"),
-      iban: optStr(formData, "iban"),
-    });
+    const { error } = await db.from("vme").insert(fields);
     if (error) return { ok: false, error: error.message };
 
     revalidatePath("/admin/vme");
@@ -35,18 +61,11 @@ export async function updateVme(
 ): Promise<ActionState> {
   return runAdmin(async (db) => {
     const id = str(formData, "id");
-    const naam = str(formData, "naam");
-    if (!id || !naam)
-      return { ok: false, error: "Naam is verplicht." };
+    if (!id) return { ok: false, error: "Geen VME." };
+    const fields = parseVme(formData);
+    if ("error" in fields) return { ok: false, error: fields.error };
 
-    const { error } = await db
-      .from("vme")
-      .update({
-        naam,
-        adres: optStr(formData, "adres"),
-        iban: optStr(formData, "iban"),
-      })
-      .eq("id", id);
+    const { error } = await db.from("vme").update(fields).eq("id", id);
     if (error) return { ok: false, error: error.message };
 
     revalidatePath("/admin/vme");

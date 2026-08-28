@@ -22,6 +22,11 @@ in `supabase/migrations/` **in volgorde**:
 2. `20260828090100_functions.sql`
 3. `20260828090200_rls.sql`
 4. `20260828090300_storage.sql`
+5. `20260828100000_vme_bankrekeningen.sql`
+
+Of in één keer: plak `supabase/full_setup.sql`.
+Al een bestaande database? Draai enkel de nieuwe migratie(s), bv.
+`20260828100000_vme_bankrekeningen.sql`.
 
 ## Eerste syndicus (admin) aanmaken
 

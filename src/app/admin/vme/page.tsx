@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { datum } from "@/lib/format";
 import {
   Card,
   CardContent,
@@ -50,30 +49,40 @@ export default async function VmePage() {
           {!vmes || vmes.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nog geen VME&apos;s.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Naam</TableHead>
-                  <TableHead>Adres</TableHead>
-                  <TableHead>IBAN</TableHead>
-                  <TableHead>Aangemaakt</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {vmes.map((v) => (
-                  <TableRow key={v.id}>
-                    <TableCell className="font-medium">{v.naam}</TableCell>
-                    <TableCell>{v.adres ?? "—"}</TableCell>
-                    <TableCell>{v.iban ?? "—"}</TableCell>
-                    <TableCell>{datum(v.created_at)}</TableCell>
-                    <TableCell className="text-right">
-                      <EditVmeDialog vme={v} />
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Naam</TableHead>
+                    <TableHead className="text-right">App.</TableHead>
+                    <TableHead>Zichtrekening</TableHead>
+                    <TableHead>Spaarrekening (reservefonds)</TableHead>
+                    <TableHead>Adres</TableHead>
+                    <TableHead />
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {vmes.map((v) => (
+                    <TableRow key={v.id}>
+                      <TableCell className="font-medium">{v.naam}</TableCell>
+                      <TableCell className="text-right">
+                        {v.aantal_kavels ?? "—"}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {v.iban ?? "—"}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {v.iban_reserve ?? "—"}
+                      </TableCell>
+                      <TableCell>{v.adres ?? "—"}</TableCell>
+                      <TableCell className="text-right">
+                        <EditVmeDialog vme={v} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

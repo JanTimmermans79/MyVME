@@ -1,13 +1,9 @@
 ﻿-- =============================================================================
 -- MyVME - VOLLEDIGE DATABASE-SETUP (alle migraties samengevoegd)
--- Plak dit in de Supabase SQL Editor en klik Run. Eenmalig uit te voeren.
--- Idempotent genoeg voor een lege database; bij herhaling geeft het fouten
--- over bestaande objecten (dat is dan ook de bedoeling).
+-- Plak in de Supabase SQL Editor en klik Run. Idempotent voor een lege database.
 -- =============================================================================
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
--- BRON: supabase\migrations\20260828090000_schema.sql
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+-- >>> BRON: supabase/migrations/20260828090000_schema.sql
 
 -- =============================================================================
 -- MyVME - basis datamodel (multi-tenant: meerdere VME's per syndicus)
@@ -225,9 +221,7 @@ create index afrekening_unit_idx on public.afrekening(unit_id);
 create index afrekening_boekjaar_idx on public.afrekening(boekjaar_id);
 
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
--- BRON: supabase\migrations\20260828090100_functions.sql
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+-- >>> BRON: supabase/migrations/20260828090100_functions.sql
 
 -- =============================================================================
 -- Helper-functies (voor RLS) + saldo-berekening
@@ -397,9 +391,7 @@ create trigger afrekening_touch
   for each row execute function public.touch_updated_at();
 
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
--- BRON: supabase\migrations\20260828090200_rls.sql
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+-- >>> BRON: supabase/migrations/20260828090200_rls.sql
 
 -- =============================================================================
 -- Row Level Security. Verplicht vanaf de eerste migratie.
@@ -563,9 +555,7 @@ create policy afrekening_select_eigenaar on public.afrekening
   for select to authenticated using (public.owns_unit(unit_id));
 
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
--- BRON: supabase\migrations\20260828090300_storage.sql
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+-- >>> BRON: supabase/migrations/20260828090300_storage.sql
 
 -- =============================================================================
 -- Storage: private bucket 'documenten' voor kostenbewijzen / facturen.
@@ -583,5 +573,33 @@ create policy "documenten_admin_all" on storage.objects
   for all to authenticated
   using (bucket_id = 'documenten' and public.is_admin())
   with check (bucket_id = 'documenten' and public.is_admin());
+
+
+-- >>> BRON: supabase/migrations/20260828100000_vme_bankrekeningen.sql
+
+-- =============================================================================
+-- VME: tweede bankrekening (spaarrekening / reservefonds) + aantal kavels
+-- =============================================================================
+-- Bestaande kolom `vme.iban` = de ZICHTREKENING (werkingsrekening): hierop komen
+-- de voorschotten van eigenaars en huurders binnen.
+-- Nieuwe kolom `vme.iban_reserve` = de SPAARREKENING: het reservefonds.
+-- =============================================================================
+
+alter table public.vme
+  add column if not exists iban_reserve  text,
+  add column if not exists aantal_kavels integer;
+
+alter table public.vme
+  drop constraint if exists vme_aantal_kavels_check;
+alter table public.vme
+  add constraint vme_aantal_kavels_check
+  check (aantal_kavels is null or aantal_kavels >= 0);
+
+comment on column public.vme.iban is
+  'Zichtrekening (werkingsrekening): voorschotten van eigenaars/huurders';
+comment on column public.vme.iban_reserve is
+  'Spaarrekening: reservefonds van de VME';
+comment on column public.vme.aantal_kavels is
+  'Aantal kavels/appartementen in de VME (informatief)';
 
 

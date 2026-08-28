@@ -31,7 +31,12 @@ export interface Vme {
   id: string;
   naam: string;
   adres: string | null;
+  /** Zichtrekening (werkingsrekening): voorschotten van eigenaars/huurders. */
   iban: string | null;
+  /** Spaarrekening: reservefonds van de VME. */
+  iban_reserve: string | null;
+  /** Aantal kavels/appartementen (informatief). */
+  aantal_kavels: number | null;
   created_at: string;
 }
 

@@ -19,9 +19,31 @@ import { createVme, updateVme, deleteVme } from "./actions";
 
 export function CreateVmeForm() {
   return (
-    <ActionForm action={createVme} resetOnSuccess className="grid gap-3 sm:grid-cols-2">
+    <ActionForm
+      action={createVme}
+      resetOnSuccess
+      className="grid gap-3 sm:grid-cols-2"
+    >
       <Field label="Naam" name="naam" required />
-      <Field label="IBAN" name="iban" placeholder="BE.." />
+      <Field
+        label="Aantal appartementen"
+        name="aantal_kavels"
+        type="number"
+        min={0}
+        inputMode="numeric"
+      />
+      <Field
+        label="Zichtrekening (IBAN)"
+        name="iban"
+        placeholder="BE.."
+        hint="Werkingsrekening: hierop betalen eigenaars en huurders hun voorschotten."
+      />
+      <Field
+        label="Spaarrekening / reservefonds (IBAN)"
+        name="iban_reserve"
+        placeholder="BE.."
+        hint="Reservefonds van de VME."
+      />
       <Field label="Adres" name="adres" className="sm:col-span-2" />
       <div className="sm:col-span-2">
         <SubmitButton>VME toevoegen</SubmitButton>
@@ -50,7 +72,24 @@ export function EditVmeDialog({ vme }: { vme: Vme }) {
           className="space-y-3"
         >
           <Field label="Naam" name="naam" required defaultValue={vme.naam} />
-          <Field label="IBAN" name="iban" defaultValue={vme.iban ?? ""} />
+          <Field
+            label="Aantal appartementen"
+            name="aantal_kavels"
+            type="number"
+            min={0}
+            defaultValue={vme.aantal_kavels ?? ""}
+          />
+          <Field
+            label="Zichtrekening (IBAN)"
+            name="iban"
+            defaultValue={vme.iban ?? ""}
+            hint="Voorschotten van eigenaars/huurders."
+          />
+          <Field
+            label="Spaarrekening / reservefonds (IBAN)"
+            name="iban_reserve"
+            defaultValue={vme.iban_reserve ?? ""}
+          />
           <Field label="Adres" name="adres" defaultValue={vme.adres ?? ""} />
           <DialogFooter>
             <SubmitButton>Opslaan</SubmitButton>
