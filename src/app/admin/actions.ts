@@ -1,8 +1,9 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { str, type ActionState } from "@/lib/action-helpers";
 import {
@@ -12,19 +13,23 @@ import {
 
 const YEAR = 60 * 60 * 24 * 365;
 
+async function setVmeCookie(vmeId: string) {
+  const c = await cookies();
+  c.set(ACTIVE_VME_COOKIE, vmeId, { path: "/", maxAge: YEAR, sameSite: "lax" });
+  c.delete(ACTIVE_BOEKJAAR_COOKIE); // boekjaar hoort bij de vorige VME
+}
+
+/** Enkel een UI-cookie; RLS beschermt de data, dus elke ingelogde gebruiker mag. */
 export async function setActiveVme(formData: FormData) {
-  await requireAdmin();
+  await requireUser();
   const vmeId = String(formData.get("vme_id") ?? "");
-  if (vmeId) {
-    const c = await cookies();
-    c.set(ACTIVE_VME_COOKIE, vmeId, { path: "/", maxAge: YEAR, sameSite: "lax" });
-    c.delete(ACTIVE_BOEKJAAR_COOKIE); // boekjaar hoort bij de vorige VME
-  }
+  if (vmeId) await setVmeCookie(vmeId);
   revalidatePath("/admin", "layout");
+  revalidatePath("/dashboard", "layout");
 }
 
 export async function setActiveBoekjaar(formData: FormData) {
-  await requireAdmin();
+  await requireUser();
   const id = String(formData.get("boekjaar_id") ?? "");
   if (id) {
     const c = await cookies();
@@ -35,6 +40,17 @@ export async function setActiveBoekjaar(formData: FormData) {
     });
   }
   revalidatePath("/admin", "layout");
+  revalidatePath("/dashboard", "layout");
+}
+
+/** VME kiezen op de overzichtspagina en meteen naar het dashboard. */
+export async function kiesVme(formData: FormData) {
+  await requireAdmin();
+  const vmeId = String(formData.get("vme_id") ?? "");
+  if (!vmeId) return;
+  await setVmeCookie(vmeId);
+  revalidatePath("/admin", "layout");
+  redirect("/admin/dashboard");
 }
 
 /** Maakt een boekjaar aan en zet het meteen als actief. */

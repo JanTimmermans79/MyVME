@@ -17,12 +17,16 @@ export function AppShell({
   nav,
   userLabel,
   contextBar,
+  backHref,
+  backLabel,
   children,
 }: {
   title: string;
   nav: NavGroup[];
   userLabel: string;
   contextBar?: React.ReactNode;
+  backHref?: string;
+  backLabel?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -33,6 +37,14 @@ export function AppShell({
             <Link href="/" className="font-semibold">
               {title}
             </Link>
+            {backHref && (
+              <Link
+                href={backHref}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                {backLabel ?? "← Terug"}
+              </Link>
+            )}
             <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
               {nav.map((group, i) => (
                 <div key={i} className="flex flex-wrap items-center gap-1">

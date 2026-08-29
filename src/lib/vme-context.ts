@@ -42,10 +42,14 @@ export async function getActiveContext(): Promise<ActiveContext> {
   const boekjaren = (bjData as Boekjaar[] | null) ?? [];
 
   const wantedBj = cookieStore.get(ACTIVE_BOEKJAAR_COOKIE)?.value;
+  const vandaag = new Date().toISOString().slice(0, 10);
   const boekjaar =
     boekjaren.find((b) => b.id === wantedBj) ??
+    boekjaren.find(
+      (b) => b.start_datum <= vandaag && vandaag <= b.eind_datum,
+    ) ??
     boekjaren.find((b) => b.status === "open") ??
-    boekjaren[0] ??
+    boekjaren[0] ?? // nieuwste (lijst is desc gesorteerd)
     null;
 
   return { vmes, vme, boekjaren, boekjaar };

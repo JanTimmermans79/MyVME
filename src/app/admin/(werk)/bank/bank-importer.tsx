@@ -107,6 +107,7 @@ export function BankImporter({
 
   // PDF
   const [pdf, setPdf] = useState<PdfResultaat | null>(null);
+  const [pdfName, setPdfName] = useState("");
 
   async function onXls(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -128,6 +129,7 @@ export function BankImporter({
   function onPdf(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setPdfName(file.name);
     const fd = new FormData();
     fd.set("pdf", file);
     startTransition(async () => {
@@ -148,13 +150,32 @@ export function BankImporter({
 
   const xls = sheet ? buildTransactions(sheet, mapping) : null;
 
-  function importeer(rows: ParsedTx[], bron: "xls" | "pdf", rekening?: string) {
+  function importeer(
+    rows: ParsedTx[],
+    bron: "xls" | "pdf",
+    rekening?: string,
+    meta?: {
+      periode_van?: string | null;
+      periode_tot?: string | null;
+      saldo_begin?: number | null;
+      saldo_eind?: number | null;
+      bestandsnaam?: string | null;
+    },
+  ) {
     if (rows.length === 0) return;
     const fd = new FormData();
     fd.set("vme_id", vmeId);
     fd.set("rows", JSON.stringify(rows));
     fd.set("bron", bron);
     if (rekening) fd.set("rekening", rekening);
+
+    const datums = rows.map((r) => r.datum).filter(Boolean).sort();
+    fd.set("periode_van", meta?.periode_van ?? datums[0] ?? "");
+    fd.set("periode_tot", meta?.periode_tot ?? datums[datums.length - 1] ?? "");
+    if (meta?.saldo_begin != null) fd.set("saldo_begin", String(meta.saldo_begin));
+    if (meta?.saldo_eind != null) fd.set("saldo_eind", String(meta.saldo_eind));
+    if (meta?.bestandsnaam) fd.set("bestandsnaam", meta.bestandsnaam);
+
     startTransition(async () => {
       const res = await importTransacties({ ok: false }, fd);
       if (res.ok) {
@@ -163,6 +184,7 @@ export function BankImporter({
         setMapping({});
         setFileName("");
         setPdf(null);
+        setPdfName("");
       } else {
         toast.error(res.error ?? "Import mislukt.");
       }
@@ -226,7 +248,13 @@ export function BankImporter({
             <PreviewTabel rows={pdf.txns} />
             <Button
               onClick={() =>
-                importeer(pdf.txns, "pdf", pdf.rekening ?? undefined)
+                importeer(pdf.txns, "pdf", pdf.rekening ?? undefined, {
+                  periode_van: pdf.periode_van,
+                  periode_tot: pdf.periode_tot,
+                  saldo_begin: pdf.saldo_begin,
+                  saldo_eind: pdf.saldo_eind,
+                  bestandsnaam: pdfName,
+                })
               }
               disabled={pending}
             >
@@ -289,7 +317,9 @@ export function BankImporter({
                 </p>
                 {xls.ok.length > 0 && <PreviewTabel rows={xls.ok} />}
                 <Button
-                  onClick={() => importeer(xls.ok, "xls", "zicht")}
+                  onClick={() =>
+                    importeer(xls.ok, "xls", "zicht", { bestandsnaam: fileName })
+                  }
                   disabled={pending || xls.ok.length === 0}
                 >
                   {pending ? "Bezig…" : `Importeer ${xls.ok.length} verrichtingen`}

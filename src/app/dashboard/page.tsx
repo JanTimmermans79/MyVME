@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveContext } from "@/lib/vme-context";
 import { euro, datum, saldoRichting } from "@/lib/format";
 import {
   Card,
@@ -17,37 +18,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Afrekening, Eigenaar, Transactie, Unit } from "@/lib/types";
+import type { Afrekening, Eigenaar, Unit } from "@/lib/types";
 
 export const metadata = { title: "Mijn overzicht" };
 
 export default async function DashboardPage() {
   await requireUser();
   const supabase = await createClient();
+  const { vme, boekjaar } = await getActiveContext();
 
-  // RLS zorgt ervoor dat enkel de eigen records terugkomen.
+  // RLS: enkel de eigen records.
   const { data: eigenaars } = await supabase
     .from("eigenaar")
     .select("*")
     .returns<Eigenaar[]>();
-
-  const { data: units } = await supabase
-    .from("unit")
-    .select("*")
-    .returns<Unit[]>();
-
-  const jaarStart = `${new Date().getFullYear()}-01-01`;
-  const { data: transacties } = await supabase
-    .from("transactie")
-    .select("*")
-    .gte("datum", jaarStart)
-    .returns<Transactie[]>();
-
-  const { data: afrekeningen } = await supabase
-    .from("afrekening")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .returns<Afrekening[]>();
 
   if (!eigenaars || eigenaars.length === 0) {
     return (
@@ -55,66 +39,85 @@ export default async function DashboardPage() {
         <CardHeader>
           <CardTitle>Nog niet gekoppeld</CardTitle>
           <CardDescription>
-            Je account is nog niet aan een unit gekoppeld. Neem contact op met de
-            syndicus.
+            Je account is nog niet aan een wooneenheid gekoppeld. Neem contact op
+            met de syndicus.
           </CardDescription>
         </CardHeader>
       </Card>
     );
   }
 
+  if (!vme) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Geen VME</CardTitle>
+          <CardDescription>
+            Er is geen VME beschikbaar voor je account.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  const { data: units } = await supabase
+    .from("unit")
+    .select("*")
+    .eq("vme_id", vme.id)
+    .returns<Unit[]>();
+  const unitIds = (units ?? []).map((u) => u.id);
   const unitById = new Map((units ?? []).map((u) => [u.id, u]));
+  const eigenInVme = eigenaars.filter((e) => unitIds.includes(e.unit_id));
+
+  const { data: afrekeningen } =
+    boekjaar && unitIds.length
+      ? await supabase
+          .from("afrekening")
+          .select("*")
+          .eq("boekjaar_id", boekjaar.id)
+          .in("unit_id", unitIds)
+          .returns<Afrekening[]>()
+      : { data: [] as Afrekening[] };
 
   return (
     <div className="space-y-6">
-      {eigenaars.map((eig) => {
+      {!boekjaar && (
+        <Card>
+          <CardHeader>
+            <CardDescription>
+              Er is nog geen boekjaar voor {vme.naam}.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
+      {eigenInVme.map((eig) => {
         const unit = unitById.get(eig.unit_id);
-        const unitTx = (transacties ?? []).filter(
-          (t) => t.gematchte_unit_id === eig.unit_id,
-        );
-        const perBetaler = (["eigenaar", "huurder"] as const).map((bt) => ({
-          betaler_type: bt,
-          totaal: unitTx
-            .filter((t) => t.betaler_type === bt)
-            .reduce((s, t) => s + Number(t.bedrag), 0),
-        }));
-        const unitAfrekeningen = (afrekeningen ?? []).filter(
+        const unitAfr = (afrekeningen ?? []).filter(
           (a) => a.unit_id === eig.unit_id,
         );
 
         return (
           <Card key={eig.id}>
             <CardHeader>
-              <CardTitle>{unit?.naam ?? "Unit"}</CardTitle>
+              <CardTitle>{unit?.naam ?? "Wooneenheid"}</CardTitle>
               <CardDescription>
-                Eigenaar: {[eig.voornaam, eig.naam].filter(Boolean).join(" ")}
+                {[eig.voornaam, eig.naam].filter(Boolean).join(" ")}
+                {boekjaar
+                  ? ` · boekjaar ${datum(boekjaar.start_datum)} – ${datum(
+                      boekjaar.eind_datum,
+                    )}`
+                  : ""}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <section>
                 <h3 className="mb-2 text-sm font-medium">
-                  Betalingen dit kalenderjaar
+                  Jaarafrekening{boekjaar ? "" : " (kies een boekjaar)"}
                 </h3>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {perBetaler.map((s) => (
-                    <div key={s.betaler_type} className="rounded-lg border p-3">
-                      <p className="text-xs uppercase text-muted-foreground">
-                        {s.betaler_type}
-                      </p>
-                      <p className="text-lg font-semibold">{euro(s.totaal)}</p>
-                      <p className="text-xs text-muted-foreground">
-                        totaal ontvangen en gematcht
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              <section>
-                <h3 className="mb-2 text-sm font-medium">Jaarafrekeningen</h3>
-                {unitAfrekeningen.length === 0 ? (
+                {unitAfr.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    Nog geen afrekeningen.
+                    Nog geen afrekening voor dit boekjaar.
                   </p>
                 ) : (
                   <Table>
@@ -128,8 +131,8 @@ export default async function DashboardPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {unitAfrekeningen.map((a) => {
-                        const r = saldoRichting(a.saldo);
+                      {unitAfr.map((a) => {
+                        const r = saldoRichting(Number(a.saldo));
                         return (
                           <TableRow key={a.id}>
                             <TableCell className="capitalize">

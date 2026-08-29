@@ -186,6 +186,38 @@ export async function importTransacties(
     const { error } = await db.from("transactie").insert(nieuw);
     if (error) return { ok: false, error: error.message };
 
+    // Uittreksel-metadata bewaren (periode + saldo) voor het dashboard.
+    const periode_van = str(formData, "periode_van");
+    const periode_tot = str(formData, "periode_tot");
+    if (rekening && periode_van && periode_tot) {
+      const saldoBeginRaw = str(formData, "saldo_begin");
+      const saldoEindRaw = str(formData, "saldo_eind");
+      const bestandsnaam = str(formData, "bestandsnaam") || null;
+
+      const { data: bestaat } = await db
+        .from("bankuittreksel")
+        .select("id")
+        .eq("vme_id", vme_id)
+        .eq("rekening", rekening)
+        .eq("periode_van", periode_van)
+        .eq("periode_tot", periode_tot)
+        .maybeSingle();
+
+      if (!bestaat) {
+        await db.from("bankuittreksel").insert({
+          vme_id,
+          rekening,
+          bron,
+          periode_van,
+          periode_tot,
+          saldo_begin: saldoBeginRaw ? Number(saldoBeginRaw) : null,
+          saldo_eind: saldoEindRaw ? Number(saldoEindRaw) : null,
+          aantal_verrichtingen: rows.length,
+          bestandsnaam,
+        });
+      }
+    }
+
     const auto = nieuw.filter((n) => n.match_type === "automatisch").length;
     const teControleren = nieuw.filter(
       (n) => n.match_type === "onbevestigd",

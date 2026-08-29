@@ -1,5 +1,7 @@
 "use server";
 
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
   runAdmin,
@@ -7,6 +9,10 @@ import {
   optStr,
   type ActionState,
 } from "@/lib/action-helpers";
+import {
+  ACTIVE_VME_COOKIE,
+  ACTIVE_BOEKJAAR_COOKIE,
+} from "@/lib/vme-context";
 
 type VmeFields = {
   naam: string;
@@ -42,17 +48,37 @@ export async function createVme(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  return runAdmin(async (db) => {
+  let nieuwId: string | null = null;
+  const res = await runAdmin(async (db) => {
     const fields = parseVme(formData);
     if ("error" in fields) return { ok: false, error: fields.error };
 
-    const { error } = await db.from("vme").insert(fields);
+    const { data, error } = await db
+      .from("vme")
+      .insert(fields)
+      .select("id")
+      .single();
     if (error) return { ok: false, error: error.message };
 
+    nieuwId = data.id as string;
     revalidatePath("/admin/vme");
     revalidatePath("/admin", "layout");
     return { ok: true, message: "VME aangemaakt." };
   });
+
+  // Nieuwe VME meteen als werkcontext zetten en erin springen. redirect() moet
+  // buiten runAdmin gebeuren (die vangt de NEXT_REDIRECT-throw anders op).
+  if (res.ok && nieuwId) {
+    const c = await cookies();
+    c.set(ACTIVE_VME_COOKIE, nieuwId, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    });
+    c.delete(ACTIVE_BOEKJAAR_COOKIE);
+    redirect("/admin/config");
+  }
+  return res;
 }
 
 export async function updateVme(

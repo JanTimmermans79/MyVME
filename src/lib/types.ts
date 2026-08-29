@@ -175,6 +175,20 @@ export interface Verbruik {
   created_at: string;
 }
 
+export interface Bankuittreksel {
+  id: string;
+  vme_id: string;
+  rekening: VmeRekening;
+  bron: TransactieBron;
+  periode_van: string | null;
+  periode_tot: string | null;
+  saldo_begin: number | null;
+  saldo_eind: number | null;
+  aantal_verrichtingen: number;
+  bestandsnaam: string | null;
+  created_at: string;
+}
+
 export interface Transactie {
   id: string;
   vme_id: string;

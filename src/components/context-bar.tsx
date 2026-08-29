@@ -63,11 +63,13 @@ export function ContextBar({
   vme,
   boekjaren,
   boekjaar,
+  canCreateBoekjaar = true,
 }: {
   vmes: Vme[];
   vme: Vme | null;
   boekjaren: Boekjaar[];
   boekjaar: Boekjaar | null;
+  canCreateBoekjaar?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -112,6 +114,7 @@ export function ContextBar({
         <span className="text-sm text-muted-foreground">geen boekjaar</span>
       )}
 
+      {!canCreateBoekjaar ? null : (
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
           <Button size="sm" variant="outline" disabled={!vme}>
@@ -138,6 +141,7 @@ export function ContextBar({
           </ActionForm>
         </DialogContent>
       </Dialog>
+      )}
     </div>
   );
 }

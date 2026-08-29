@@ -7,8 +7,8 @@ export function NoBoekjaar() {
         <CardTitle>Geen boekjaar geselecteerd</CardTitle>
       </CardHeader>
       <CardContent className="text-sm text-muted-foreground">
-        Kies of maak een boekjaar bovenaan de pagina. Alle schermen hieronder
-        werken in dat boekjaar.
+        Kies of maak een boekjaar in de balk bovenaan. Alle schermen werken
+        binnen dat boekjaar.
       </CardContent>
     </Card>
   );
