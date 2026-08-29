@@ -26,6 +26,7 @@ import { suggestie, type Kandidaat } from "@/lib/bank-matching";
 import { BankImporter } from "./bank-importer";
 import { AssignRow } from "./assign-row";
 import { SoortSelect } from "./soort-select";
+import { BoekjaarSelect } from "./boekjaar-select";
 import {
   assignTransactie,
   ontkoppelTransactie,
@@ -35,7 +36,7 @@ import {
 export const metadata = { title: "Bankimport" };
 
 export default async function BankPage() {
-  const { vme: active, boekjaar } = await getActiveContext();
+  const { vme: active, boekjaar, boekjaren } = await getActiveContext();
   if (!active || !boekjaar) return <NoBoekjaar />;
 
   const supabase = await createClient();
@@ -151,6 +152,11 @@ export default async function BankPage() {
                   )}
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                     <SoortSelect id={t.id} waarde={t.soort} />
+                    <BoekjaarSelect
+                      id={t.id}
+                      waarde={t.boekjaar_id}
+                      boekjaren={boekjaren}
+                    />
                     {t.rekening && (
                       <span className="text-muted-foreground">
                         {t.rekening}rekening
@@ -249,6 +255,7 @@ export default async function BankPage() {
                     <TableHead>Tegenpartij</TableHead>
                     <TableHead>Rek.</TableHead>
                     <TableHead>Soort</TableHead>
+                    <TableHead>Boekjaar</TableHead>
                     <TableHead>Unit</TableHead>
                     <TableHead>Betaler</TableHead>
                     <TableHead>Match</TableHead>
@@ -268,6 +275,13 @@ export default async function BankPage() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{t.soort}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <BoekjaarSelect
+                          id={t.id}
+                          waarde={t.boekjaar_id}
+                          boekjaren={boekjaren}
+                        />
                       </TableCell>
                       <TableCell>
                         {t.gematchte_unit_id

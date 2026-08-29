@@ -86,6 +86,73 @@ export async function createKost(
   });
 }
 
+const VERDELINGEN = [
+  "individueel_verbruik",
+  "gelijk_huurders",
+  "per_quotiteit",
+  "gelijk_eigenaars",
+];
+
+function verdelingVelden(formData: FormData) {
+  const verdeling = str(formData, "verdeling");
+  const genormaliseerd = VERDELINGEN.includes(verdeling)
+    ? verdeling
+    : "gelijk_huurders";
+  const betaler_type: "huurder" | "eigenaar" =
+    genormaliseerd === "per_quotiteit" || genormaliseerd === "gelijk_eigenaars"
+      ? "eigenaar"
+      : "huurder";
+  return { verdeling: genormaliseerd, betaler_type };
+}
+
+export async function updateKost(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAdmin(async (db) => {
+    const id = str(formData, "id");
+    const vme_id = str(formData, "vme_id");
+    const boekjaar_id = str(formData, "boekjaar_id");
+    const categorie = str(formData, "categorie");
+    const datum = str(formData, "datum");
+    if (!id || !boekjaar_id || !categorie || !datum)
+      return { ok: false, error: "Boekjaar, categorie en datum zijn verplicht." };
+
+    const { verdeling, betaler_type } = verdelingVelden(formData);
+
+    const patch: Record<string, unknown> = {
+      boekjaar_id,
+      categorie,
+      bedrag: num(formData, "bedrag"),
+      datum,
+      leverancier: optStr(formData, "leverancier"),
+      omschrijving: optStr(formData, "omschrijving"),
+      verdeelsleutel_id: optStr(formData, "verdeelsleutel_id"),
+      verdeling,
+      betaler_type,
+    };
+
+    const fileEntry = formData.get("document");
+    if (fileEntry instanceof File && fileEntry.size > 0) {
+      const { data: oud } = await db
+        .from("kosten")
+        .select("document_url")
+        .eq("id", id)
+        .maybeSingle<{ document_url: string | null }>();
+      patch.document_url = await uploadDocument(db, vme_id, fileEntry);
+      if (oud?.document_url)
+        await db.storage.from("documenten").remove([oud.document_url]);
+    }
+
+    const { error } = await db.from("kosten").update(patch).eq("id", id);
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath("/admin/kosten");
+    revalidatePath("/admin", "layout");
+    return { ok: true, message: "Kost bijgewerkt." };
+  });
+}
+
 const nz = (s: string | null | undefined) =>
   s ? s.replace(/\s+/g, "").toUpperCase() : null;
 

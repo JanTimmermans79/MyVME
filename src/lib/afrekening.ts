@@ -2,6 +2,10 @@ import "server-only";
 
 import type { BetalerType } from "@/lib/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  boekjaarOrFilter,
+  metBoekjaarFilter,
+} from "@/lib/boekjaar-transacties";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -98,22 +102,36 @@ export async function berekenAfrekening(
     );
   }
 
-  const { data: transacties } = unitIds.length
-    ? await db
-        .from("transactie")
-        .select("bedrag, betaler_type, gematchte_unit_id, datum, soort, rekening")
-        .in("gematchte_unit_id", unitIds)
-        .gte("datum", boekjaar.start_datum)
-        .lte("datum", boekjaar.eind_datum)
-    : { data: [] };
-  const txList = (transacties ?? []) as {
+  type ATx = {
     bedrag: number;
     betaler_type: BetalerType | null;
     gematchte_unit_id: string | null;
     datum: string;
     soort: string;
     rekening: string | null;
-  }[];
+    boekjaar_id?: string | null;
+  };
+  const ACOL = "bedrag, betaler_type, gematchte_unit_id, datum, soort, rekening";
+  const txList: ATx[] = unitIds.length
+    ? await metBoekjaarFilter<ATx>(
+        () =>
+          db
+            .from("transactie")
+            .select(`${ACOL}, boekjaar_id`)
+            .in("gematchte_unit_id", unitIds)
+            .or(boekjaarOrFilter(boekjaar))
+            .returns<ATx[]>(),
+        () =>
+          db
+            .from("transactie")
+            .select(ACOL)
+            .in("gematchte_unit_id", unitIds)
+            .gte("datum", boekjaar.start_datum)
+            .lte("datum", boekjaar.eind_datum)
+            .returns<ATx[]>(),
+        boekjaar,
+      )
+    : [];
 
   let kostenZonderSleutel = 0;
   let totaalKosten = 0;

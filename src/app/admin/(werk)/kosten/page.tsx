@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import type { Kosten, Verdeelsleutel } from "@/lib/types";
 import {
   CreateKostForm,
+  EditKostDialog,
   ConfirmKostButton,
   DeleteKostButton,
 } from "./kosten-forms";
@@ -32,7 +33,7 @@ import {
 export const metadata = { title: "Kosten" };
 
 export default async function KostenPage() {
-  const { vme: active, boekjaar } = await getActiveContext();
+  const { vme: active, boekjaar, boekjaren } = await getActiveContext();
   if (!active || !boekjaar) return <NoBoekjaar />;
 
   const supabase = await createClient();
@@ -50,7 +51,6 @@ export default async function KostenPage() {
       .order("datum", { ascending: false })
       .returns<Kosten[]>(),
   ]);
-  const boekjaren = [boekjaar];
 
   const sleutelById = new Map((sleutels ?? []).map((s) => [s.id, s.naam]));
 
@@ -159,6 +159,11 @@ export default async function KostenPage() {
                           {k.status === "voorstel" && (
                             <ConfirmKostButton id={k.id} />
                           )}
+                          <EditKostDialog
+                            kost={k}
+                            boekjaren={boekjaren}
+                            verdeelsleutels={sleutels ?? []}
+                          />
                           <DeleteKostButton id={k.id} />
                         </div>
                       </TableCell>

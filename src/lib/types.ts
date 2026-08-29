@@ -212,6 +212,7 @@ export interface Transactie {
   bron: TransactieBron;
   rekening: VmeRekening | null;
   soort: TransactieSoort;
+  boekjaar_id: string | null;
   import_hash: string;
   gematchte_unit_id: string | null;
   betaler_type: BetalerType | null;

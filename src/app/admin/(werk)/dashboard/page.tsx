@@ -16,13 +16,21 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveContext } from "@/lib/vme-context";
 import { euro, datum } from "@/lib/format";
-import { vmeBoekjaarOverzicht, jaarlijkseTotalen } from "@/lib/vme-dashboard";
+import {
+  vmeBoekjaarOverzicht,
+  jaarlijkseTotalen,
+  gedeeldeKostenPerJaar,
+  type RekeningCashflow,
+} from "@/lib/vme-dashboard";
+import { verbruik5Jaar } from "@/lib/verbruik";
 import { voorschotControle } from "@/lib/voorschot-controle";
 import { berekenHuurderAfrekeningen } from "@/lib/huurder-afrekening";
 import { NoBoekjaar } from "@/components/no-boekjaar";
 import { StatCard } from "@/components/stat-card";
 import { QuickActions } from "@/components/quick-actions";
 import { BarChart } from "@/components/bar-chart";
+import { StackedBarChart } from "@/components/stacked-bar-chart";
+import { VerbruikOverzicht } from "@/components/verbruik-overzicht";
 import {
   Card,
   CardContent,
@@ -71,17 +79,74 @@ function PostLijst({
   );
 }
 
+function RekeningKaart({
+  titel,
+  omschrijving,
+  cf,
+}: {
+  titel: string;
+  omschrijving: string;
+  cf: RekeningCashflow;
+}) {
+  const saldoBekend = cf.saldoEind != null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Banknote className="size-4 text-sky-500" /> {titel}
+        </CardTitle>
+        <CardDescription>{omschrijving}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <PostLijst
+          posten={cf.inkomsten}
+          totaal={cf.totaalIn}
+          totaalLabel="Totaal inkomsten"
+        />
+        <PostLijst
+          posten={cf.uitgaven}
+          totaal={cf.totaalUit}
+          totaalLabel="Totaal uitgaven"
+        />
+        <div className="rounded-lg bg-muted/50 p-3 text-sm">
+          {!cf.geuploadet ? (
+            <span className="text-amber-600">
+              Nog geen uittreksel geüpload voor dit boekjaar.{" "}
+              <Link href="/admin/bank" className="underline">
+                Uploaden
+              </Link>
+            </span>
+          ) : saldoBekend ? (
+            <span className="tabular-nums">
+              Saldo {euro(cf.saldoBegin)} →{" "}
+              <strong>{euro(cf.saldoEind)}</strong>
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              Beweging dit boekjaar {euro(cf.mutatie)} ({cf.aantal}{" "}
+              verrichtingen) — geen beginsaldo bekend.
+            </span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default async function DashboardPage() {
   const { vme, boekjaar, boekjaren } = await getActiveContext();
   if (!vme || !boekjaar) return <NoBoekjaar />;
 
   const db = createAdminClient();
-  const [overzicht, controle, huurders, jaren] = await Promise.all([
-    vmeBoekjaarOverzicht(db, vme.id, boekjaar),
-    voorschotControle(db, boekjaar.id),
-    berekenHuurderAfrekeningen(db, boekjaar.id),
-    jaarlijkseTotalen(db, vme.id, boekjaren),
-  ]);
+  const [overzicht, controle, huurders, jaren, verbruik, gedeeld] =
+    await Promise.all([
+      vmeBoekjaarOverzicht(db, vme.id, boekjaar),
+      voorschotControle(db, boekjaar.id),
+      berekenHuurderAfrekeningen(db, boekjaar.id),
+      jaarlijkseTotalen(db, vme.id, boekjaren),
+      verbruik5Jaar(db, vme.id, boekjaren),
+      gedeeldeKostenPerJaar(db, vme.id, boekjaren),
+    ]);
 
   const bewoners = controle.filter((c) => c.soort === "bewoner");
   const afwijkingen = bewoners.filter((c) => Math.abs(c.afwijking) > 1);
@@ -90,6 +155,9 @@ export default async function DashboardPage() {
     (s, h) => s + h.totaal_kosten,
     0,
   );
+  const bankSaldo =
+    (overzicht.zicht.saldoEind ?? overzicht.zicht.mutatie) +
+    (overzicht.spaar.saldoEind ?? overzicht.spaar.mutatie);
 
   return (
     <div className="space-y-6">
@@ -103,23 +171,23 @@ export default async function DashboardPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Inkomsten"
-          value={euro(overzicht.totaalOpbrengsten)}
-          sub={`${overzicht.aantalVoorschotten} voorschotten`}
+          label="Inkomsten (spaarrekening)"
+          value={euro(overzicht.spaar.totaalIn)}
+          sub="reservefonds + kapitaalopvragingen"
           icon={TrendingUp}
           color="emerald"
         />
         <StatCard
-          label="Uitgaven"
-          value={euro(Math.abs(overzicht.totaalUitgaven))}
-          sub={`${overzicht.aantalTransacties} transacties`}
+          label="Uitgaven (spaarrekening)"
+          value={euro(Math.abs(overzicht.spaar.totaalUit))}
+          sub="kosten t.l.v. de VME"
           icon={TrendingDown}
           color="rose"
         />
         <StatCard
           label="Bank saldo"
-          value={euro(overzicht.bankSaldo)}
-          sub="Zicht + spaar"
+          value={euro(bankSaldo)}
+          sub="zicht + spaar"
           icon={Landmark}
           color="blue"
           href="/admin/bank"
@@ -200,9 +268,11 @@ export default async function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            Jaarlijkse inkomsten en uitgaven
+            Inkomsten en uitgaven van de VME
           </CardTitle>
-          <CardDescription>Laatste 5 boekjaren</CardDescription>
+          <CardDescription>
+            Spaarrekening, laatste 5 boekjaren
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <BarChart data={jaren} />
@@ -210,84 +280,24 @@ export default async function DashboardPage() {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingUp className="size-4 text-emerald-500" /> Opbrengsten
-            </CardTitle>
-            <CardDescription>Ontvangen in dit boekjaar</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PostLijst
-              posten={overzicht.opbrengsten}
-              totaal={overzicht.totaalOpbrengsten}
-              totaalLabel="Totaal opbrengsten"
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingDown className="size-4 text-rose-500" /> Uitgaven
-            </CardTitle>
-            <CardDescription>Betaald in dit boekjaar</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PostLijst
-              posten={overzicht.uitgaven}
-              totaal={overzicht.totaalUitgaven}
-              totaalLabel="Totaal uitgaven"
-            />
-          </CardContent>
-        </Card>
+        <RekeningKaart
+          titel="VME zichtrekening"
+          omschrijving="Werkrekening: voorschotten bewoners in, exploitatiekosten uit."
+          cf={overzicht.zicht}
+        />
+        <RekeningKaart
+          titel="VME spaarrekening"
+          omschrijving="Reservefonds: eigenaarsprovisies en kapitaalopvragingen in, VME-kosten uit."
+          cf={overzicht.spaar}
+        />
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Banknote className="size-4 text-sky-500" /> Bankrekeningen
-          </CardTitle>
-          <CardDescription>
-            Saldo volgens de geïmporteerde uittreksels die dit boekjaar dekken.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          {overzicht.rekeningen.map((r) => (
-            <div key={r.rekening} className="rounded-lg border p-3 text-sm">
-              <p className="font-medium capitalize">
-                {r.rekening === "zicht"
-                  ? "Zichtrekening (werkrekening)"
-                  : "Spaarrekening (reservefonds)"}
-              </p>
-              {!r.geuploadet ? (
-                <p className="mt-1 text-amber-600">
-                  Nog geen {r.rekening}rekening geüpload voor dit boekjaar.{" "}
-                  <Link href="/admin/bank" className="underline">
-                    Uploaden
-                  </Link>
-                </p>
-              ) : r.saldo_begin != null && r.saldo_eind != null ? (
-                <p className="mt-1 tabular-nums">
-                  {euro(r.saldo_begin)} → <strong>{euro(r.saldo_eind)}</strong>
-                </p>
-              ) : (
-                <p className="mt-1 text-muted-foreground">
-                  Beweging dit boekjaar: {euro(r.mutatie)} ({r.aantal}{" "}
-                  verrichtingen) — geen beginsaldo bekend.
-                </p>
-              )}
-            </div>
-          ))}
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Voorschotten huurders</CardTitle>
           <CardDescription>
-            Heeft elke bewoner betaald wat t.e.m. vandaag verschuldigd is?
-            Tussen haakjes: het bedrag voor het volledige boekjaar.
+            Heeft elke bewoner betaald wat t.e.m. vandaag verschuldigd is? Tussen
+            haakjes: het bedrag voor het volledige boekjaar.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -409,6 +419,82 @@ export default async function DashboardPage() {
                       </TableCell>
                     </TableRow>
                   ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Verbruik per appartement</CardTitle>
+          <CardDescription>
+            Water en stookolie per boekjaar (m³ en €), laatste 5 boekjaren.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <VerbruikOverzicht data={verbruik} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Gedeelde kosten van de blok
+          </CardTitle>
+          <CardDescription>
+            Bevestigde kosten per categorie per boekjaar (laatste 5).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <StackedBarChart
+            categorieen={gedeeld.categorieen}
+            jaren={gedeeld.jaren}
+          />
+          {gedeeld.categorieen.length > 0 && (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Categorie</TableHead>
+                    {gedeeld.jaren.map((j) => (
+                      <TableHead key={j.boekjaar_id} className="text-right">
+                        {j.label}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {gedeeld.categorieen.map((c) => (
+                    <TableRow key={c}>
+                      <TableCell className="capitalize">{c}</TableCell>
+                      {gedeeld.jaren.map((j) => (
+                        <TableCell
+                          key={j.boekjaar_id}
+                          className="text-right tabular-nums"
+                        >
+                          {j.perCategorie[c] ? euro(j.perCategorie[c]) : "—"}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                  <TableRow className="font-medium">
+                    <TableCell>Totaal</TableCell>
+                    {gedeeld.jaren.map((j) => (
+                      <TableCell
+                        key={j.boekjaar_id}
+                        className="text-right tabular-nums"
+                      >
+                        {euro(
+                          gedeeld.categorieen.reduce(
+                            (s, c) => s + (j.perCategorie[c] ?? 0),
+                            0,
+                          ),
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
                 </TableBody>
               </Table>
             </div>

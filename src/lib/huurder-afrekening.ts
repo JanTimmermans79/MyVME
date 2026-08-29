@@ -2,6 +2,10 @@ import "server-only";
 
 import { EENHEIDSPRIJS_DEFAULTS, type TellerType } from "@/lib/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  boekjaarOrFilter,
+  metBoekjaarFilter,
+} from "@/lib/boekjaar-transacties";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -291,25 +295,48 @@ async function berekenVoorHuurder(
     (Number(vsh?.bedrag_per_maand ?? 0) * 12 * dagen) / boekjaarDagen,
   );
 
-  // voorschot ontvangen: gematchte huurder-VOORSCHOTTEN in de periode
-  // (soort='afrekening' van vorig boekjaar telt dus NIET mee)
-  const { data: tx } = await db
-    .from("transactie")
-    .select("bedrag, tegenpartij_iban")
-    .eq("gematchte_unit_id", huurder.unit_id)
-    .eq("betaler_type", "huurder")
-    .eq("soort", "voorschot")
-    .gte("datum", periodeStart)
-    .lte("datum", periodeEind);
+  // voorschot ontvangen: gematchte huurder-VOORSCHOTTEN die bij dit boekjaar
+  // horen (expliciet boekjaar_id of anders datum). soort='afrekening' van vorig
+  // boekjaar telt dus NIET mee.
+  type VsTx = {
+    bedrag: number;
+    tegenpartij_iban: string | null;
+    datum: string;
+    boekjaar_id?: string | null;
+  };
+  const tx = await metBoekjaarFilter<VsTx>(
+    () =>
+      db
+        .from("transactie")
+        .select("bedrag, tegenpartij_iban, datum, boekjaar_id")
+        .eq("gematchte_unit_id", huurder.unit_id)
+        .eq("betaler_type", "huurder")
+        .eq("soort", "voorschot")
+        .or(boekjaarOrFilter(bj))
+        .returns<VsTx[]>(),
+    () =>
+      db
+        .from("transactie")
+        .select("bedrag, tegenpartij_iban, datum")
+        .eq("gematchte_unit_id", huurder.unit_id)
+        .eq("betaler_type", "huurder")
+        .eq("soort", "voorschot")
+        .gte("datum", bj.start_datum)
+        .lte("datum", bj.eind_datum)
+        .returns<VsTx[]>(),
+    bj,
+  );
   const eigenIban = normIban(huurder.iban);
   const ontvangen = round2(
-    (tx ?? [])
-      .filter((t: { tegenpartij_iban: string | null }) => {
-        if (!eigenIban) return true;
-        const ti = normIban(t.tegenpartij_iban);
-        return !ti || ti === eigenIban;
+    tx
+      .filter((t) => {
+        if (eigenIban) {
+          const ti = normIban(t.tegenpartij_iban);
+          return !ti || ti === eigenIban;
+        }
+        return t.datum >= periodeStart && t.datum <= periodeEind;
       })
-      .reduce((s: number, t: { bedrag: number }) => s + Number(t.bedrag), 0),
+      .reduce((s, t) => s + Number(t.bedrag), 0),
   );
 
   const afwijking = Math.abs(ontvangen - verwacht);

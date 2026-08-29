@@ -131,11 +131,15 @@ export function NieuweMeterstandDialog({
   unitNaam,
   tellers,
   huurders,
+  boekjaarStart,
+  boekjaarEind,
 }: {
   unitId: string;
   unitNaam: string;
   tellers: Teller[];
   huurders: Huurder[];
+  boekjaarStart: string;
+  boekjaarEind: string;
 }) {
   const [open, setOpen] = useState(false);
   const heeft = new Set(tellers.map((t) => t.type));
@@ -153,12 +157,24 @@ export function NieuweMeterstandDialog({
         </DialogHeader>
         <ActionForm
           action={nieuweMeterstanden}
-          hiddenFields={{ unit_id: unitId }}
+          hiddenFields={{
+            unit_id: unitId,
+            boekjaar_start: boekjaarStart,
+            boekjaar_eind: boekjaarEind,
+          }}
           onSuccess={() => setOpen(false)}
           className="space-y-3"
         >
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Datum" name="datum" type="date" required />
+            <Field
+              label="Datum"
+              name="datum"
+              type="date"
+              required
+              min={boekjaarStart}
+              max={boekjaarEind}
+              defaultValue={boekjaarEind}
+            />
             <div className="space-y-1.5">
               <Label htmlFor="aanleiding">Aanleiding</Label>
               <Select name="aanleiding" defaultValue="boekjaareinde">

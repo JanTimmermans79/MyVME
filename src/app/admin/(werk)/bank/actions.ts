@@ -278,6 +278,21 @@ export async function setTransactieSoort(
   });
 }
 
+/** Koppelt een transactie expliciet aan een boekjaar (leeg = terug naar datum). */
+export async function setTransactieBoekjaar(id: string, boekjaarId: string) {
+  await runAdmin(async (db) => {
+    if (!id) return { ok: false, error: "Geen transactie." };
+    const { error } = await db
+      .from("transactie")
+      .update({ boekjaar_id: boekjaarId || null })
+      .eq("id", id);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/admin/bank");
+    revalidatePath("/admin", "layout");
+    return { ok: true, message: "Boekjaar aangepast." };
+  });
+}
+
 export async function ontkoppelTransactie(
   _prev: ActionState,
   formData: FormData,

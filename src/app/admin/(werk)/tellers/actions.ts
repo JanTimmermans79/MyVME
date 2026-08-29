@@ -61,6 +61,23 @@ export async function nieuweMeterstanden(
     if (!unit_id || !datum)
       return { ok: false, error: "Unit en datum zijn verplicht." };
 
+    // Alleen standen binnen het gekozen boekjaar (paar dagen marge voor de
+    // eindstand die soms 1-2 dagen voor/na de boekjaargrens opgenomen wordt).
+    const bjStart = str(formData, "boekjaar_start");
+    const bjEind = str(formData, "boekjaar_eind");
+    if (bjStart && bjEind) {
+      const marge = (d: string, dagen: number) => {
+        const t = new Date(`${d}T00:00:00Z`);
+        t.setUTCDate(t.getUTCDate() + dagen);
+        return t.toISOString().slice(0, 10);
+      };
+      if (datum < marge(bjStart, -3) || datum > marge(bjEind, 3))
+        return {
+          ok: false,
+          error: `Datum valt buiten het boekjaar (${bjStart} – ${bjEind}). Kies het juiste boekjaar bovenaan.`,
+        };
+    }
+
     const { data: tellers } = await db
       .from("teller")
       .select("id, type")
