@@ -20,20 +20,18 @@ async function setVmeCookie(vmeId: string) {
 }
 
 /** Enkel een UI-cookie; RLS beschermt de data, dus elke ingelogde gebruiker mag. */
-export async function setActiveVme(formData: FormData) {
+export async function setActiveVme(vmeId: string) {
   await requireUser();
-  const vmeId = String(formData.get("vme_id") ?? "");
   if (vmeId) await setVmeCookie(vmeId);
   revalidatePath("/admin", "layout");
   revalidatePath("/dashboard", "layout");
 }
 
-export async function setActiveBoekjaar(formData: FormData) {
+export async function setActiveBoekjaar(boekjaarId: string) {
   await requireUser();
-  const id = String(formData.get("boekjaar_id") ?? "");
-  if (id) {
+  if (boekjaarId) {
     const c = await cookies();
-    c.set(ACTIVE_BOEKJAAR_COOKIE, id, {
+    c.set(ACTIVE_BOEKJAAR_COOKIE, boekjaarId, {
       path: "/",
       maxAge: YEAR,
       sameSite: "lax",

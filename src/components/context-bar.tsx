@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState, useTransition } from "react";
 import { CalendarPlus } from "lucide-react";
 import type { Boekjaar, Vme } from "@/lib/types";
 import { datum } from "@/lib/format";
@@ -29,32 +29,34 @@ import {
 } from "@/components/ui/select";
 
 function AutoSelect({
-  name,
   value,
-  action,
+  onPick,
   children,
   placeholder,
 }: {
-  name: string;
   value: string;
-  action: (fd: FormData) => void | Promise<void>;
+  onPick: (value: string) => void | Promise<void>;
   children: React.ReactNode;
   placeholder?: string;
 }) {
-  const formRef = useRef<HTMLFormElement>(null);
+  const [pending, startTransition] = useTransition();
   return (
-    <form ref={formRef} action={action}>
-      <Select
-        name={name}
-        value={value}
-        onValueChange={() => formRef.current?.requestSubmit()}
+    <Select
+      value={value}
+      onValueChange={(v) => {
+        if (v && v !== value) startTransition(async () => { await onPick(v); });
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        className="min-w-[12rem]"
+        disabled={pending}
+        aria-busy={pending}
       >
-        <SelectTrigger size="sm" className="min-w-[12rem]">
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>{children}</SelectContent>
-      </Select>
-    </form>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>{children}</SelectContent>
+    </Select>
   );
 }
 
@@ -80,9 +82,8 @@ export function ContextBar({
       </span>
       {vmes.length > 1 ? (
         <AutoSelect
-          name="vme_id"
           value={vme?.id ?? ""}
-          action={setActiveVme}
+          onPick={setActiveVme}
           placeholder="Kies VME"
         >
           {vmes.map((v) => (
@@ -100,9 +101,8 @@ export function ContextBar({
 
       {boekjaren.length > 0 ? (
         <AutoSelect
-          name="boekjaar_id"
           value={boekjaar?.id ?? ""}
-          action={setActiveBoekjaar}
+          onPick={setActiveBoekjaar}
           placeholder="Kies boekjaar"
         >
           {boekjaren.map((b) => (
