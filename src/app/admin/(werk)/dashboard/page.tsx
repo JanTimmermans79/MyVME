@@ -286,7 +286,8 @@ export default async function DashboardPage() {
         <CardHeader>
           <CardTitle className="text-base">Voorschotten huurders</CardTitle>
           <CardDescription>
-            Heeft elke bewoner zijn voorschot gemeenschappelijke kosten betaald?
+            Heeft elke bewoner betaald wat t.e.m. vandaag verschuldigd is?
+            Tussen haakjes: het bedrag voor het volledige boekjaar.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -325,6 +326,11 @@ export default async function DashboardPage() {
                         <TableCell>{c.unit_naam}</TableCell>
                         <TableCell className="text-right tabular-nums">
                           {euro(c.verwacht)}
+                          {c.verwachtVol !== c.verwacht && (
+                            <span className="block text-xs text-muted-foreground">
+                              ({euro(c.verwachtVol)})
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {euro(c.ontvangen)}

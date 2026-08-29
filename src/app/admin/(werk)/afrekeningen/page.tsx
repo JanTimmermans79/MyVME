@@ -136,9 +136,10 @@ export default async function AfrekeningenPage() {
           <CardHeader>
             <CardTitle>Voorschotcontrole</CardTitle>
             <CardDescription>
-              Verwacht vs. effectief gestort per bewoner (zichtrekening) en per
-              eigenaar-reservefonds (spaarrekening). Een afwijking wijst op een
-              gemiste of foutieve storting.
+              Verwacht (pro rata t.e.m. vandaag) vs. effectief gestort per bewoner
+              (zichtrekening) en per eigenaar-reservefonds (spaarrekening). Een
+              afwijking wijst op een gemiste of foutieve storting. Tussen haakjes:
+              het bedrag voor het volledige boekjaar.
             </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
@@ -160,10 +161,15 @@ export default async function AfrekeningenPage() {
                     <TableCell>{c.unit_naam}</TableCell>
                     <TableCell>{c.wie}</TableCell>
                     <TableCell className="capitalize">{c.soort}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right tabular-nums">
                       {euro(c.verwacht)}
+                      {c.verwachtVol !== c.verwacht && (
+                        <span className="block text-xs text-muted-foreground">
+                          ({euro(c.verwachtVol)})
+                        </span>
+                      )}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right tabular-nums">
                       {euro(c.ontvangen)}
                     </TableCell>
                     <TableCell className="text-right">

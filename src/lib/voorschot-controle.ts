@@ -6,21 +6,41 @@ type Db = ReturnType<typeof createAdminClient>;
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
+const isoVandaag = () => new Date().toISOString().slice(0, 10);
+const minDatum = (a: string, b: string) => (a < b ? a : b);
+
+/** Aantal kalendermaanden van `van` t.e.m. `tot` (beide inclusief). */
+function maandenInclusief(van: string, tot: string): number {
+  const s = new Date(`${van}T00:00:00Z`);
+  const e = new Date(`${tot}T00:00:00Z`);
+  return (
+    (e.getUTCFullYear() - s.getUTCFullYear()) * 12 +
+    (e.getUTCMonth() - s.getUTCMonth()) +
+    1
+  );
+}
+
+const dagenInclusief = (van: string, tot: string) =>
+  Math.round((Date.parse(tot) - Date.parse(van)) / 86_400_000) + 1;
+
 export interface VoorschotRegel {
   unit_id: string;
   unit_naam: string;
   soort: "bewoner" | "reservefonds";
   wie: string;
-  verwacht: number; // bedrag_per_maand * 12 (of pro rata voor deelbewoning)
+  verwacht: number; // pro rata t.e.m. vandaag
+  verwachtVol: number; // volledig boekjaar (of volledige bewoningsperiode)
   ontvangen: number;
   kapitaalsoproep: number; // enkel bij reservefonds
-  afwijking: number; // ontvangen - verwacht
+  afwijking: number; // ontvangen - verwacht (t.e.m. vandaag)
 }
 
 /**
  * Controle per boekjaar: heeft elke bewoner zijn voorschot gemeenschappelijke
  * kosten betaald (zichtrekening) en elke eigenaar zijn reservefonds-provisie
- * (spaarrekening, 12x)? Toont de afwijking.
+ * (spaarrekening)? `verwacht` wordt pro rata t.e.m. vandaag berekend, zodat de
+ * afwijking ook midden in het boekjaar bruikbaar is. `verwachtVol` is het
+ * bedrag voor het volledige (resterende) boekjaar.
  */
 export async function voorschotControle(
   db: Db,
@@ -102,10 +122,16 @@ export async function voorschotControle(
     ]),
   );
 
-  const boekjaarDagen =
-    Math.round(
-      (Date.parse(bj.eind_datum) - Date.parse(bj.start_datum)) / 86_400_000,
-    ) + 1;
+  const boekjaarDagen = dagenInclusief(bj.start_datum, bj.eind_datum);
+
+  // Peildatum: vandaag, maar nooit voorbij het einde van het boekjaar.
+  const vandaag = isoVandaag();
+  const peil = minDatum(vandaag, bj.eind_datum);
+  const boekjaarBegonnen = vandaag >= bj.start_datum;
+  const totaalMaanden = maandenInclusief(bj.start_datum, bj.eind_datum);
+  const verstrekenMaanden = !boekjaarBegonnen
+    ? 0
+    : Math.min(totaalMaanden, Math.max(0, maandenInclusief(bj.start_datum, peil)));
 
   const regels: VoorschotRegel[] = [];
 
@@ -135,7 +161,8 @@ export async function voorschotControle(
         .reduce((s, t) => s + Number(t.bedrag), 0),
     );
     if (perMaand === 0 && ontvangen === 0 && kapitaal === 0) continue;
-    const verwacht = round2(perMaand * 12);
+    const verwachtVol = round2(perMaand * totaalMaanden);
+    const verwacht = round2(perMaand * verstrekenMaanden);
     const e = eigenaarByUnit.get(u.id);
     regels.push({
       unit_id: u.id,
@@ -143,6 +170,7 @@ export async function voorschotControle(
       soort: "reservefonds",
       wie: e ? [e.voornaam, e.naam].filter(Boolean).join(" ") : "—",
       verwacht,
+      verwachtVol,
       ontvangen,
       kapitaalsoproep: kapitaal,
       afwijking: round2(ontvangen - verwacht),
@@ -164,10 +192,13 @@ export async function voorschotControle(
     if (!(s <= bj.eind_datum && e >= bj.start_datum)) continue;
 
     const pStart = s > bj.start_datum ? s : bj.start_datum;
-    const pEind = e < bj.eind_datum ? e : bj.eind_datum;
+    const pEindVol = e < bj.eind_datum ? e : bj.eind_datum;
+    const pEind = minDatum(pEindVol, peil); // t.e.m. vandaag
+    const dagenVol = dagenInclusief(pStart, pEindVol);
     const dagen =
-      Math.round((Date.parse(pEind) - Date.parse(pStart)) / 86_400_000) + 1;
+      pEind >= pStart && boekjaarBegonnen ? dagenInclusief(pStart, pEind) : 0;
     const perMaand = vshMap.get(h.id) ?? 0;
+    const verwachtVol = round2((perMaand * 12 * dagenVol) / boekjaarDagen);
     const verwacht = round2((perMaand * 12 * dagen) / boekjaarDagen);
     const hIban = nz(h.iban);
     const ontvangen = round2(
@@ -180,7 +211,7 @@ export async function voorschotControle(
             // per-huurder toewijzen: op IBAN als bekend, anders op periode
             (hIban
               ? nz(t.tegenpartij_iban) === hIban
-              : t.datum >= pStart && t.datum <= pEind),
+              : t.datum >= pStart && t.datum <= pEindVol),
         )
         .reduce((s2, t) => s2 + Number(t.bedrag), 0),
     );
@@ -190,6 +221,7 @@ export async function voorschotControle(
       soort: "bewoner",
       wie: [h.voornaam, h.naam].filter(Boolean).join(" "),
       verwacht,
+      verwachtVol,
       ontvangen,
       kapitaalsoproep: 0,
       afwijking: round2(ontvangen - verwacht),
