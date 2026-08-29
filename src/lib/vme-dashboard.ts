@@ -55,10 +55,11 @@ interface TxRow {
   soort: string;
   rekening: VmeRekening | null;
   betaler_type: string | null;
+  match_type: string | null;
   datum: string;
   boekjaar_id?: string | null;
 }
-const TX_KOL = "bedrag, soort, rekening, betaler_type, datum";
+const TX_KOL = "bedrag, soort, rekening, betaler_type, match_type, datum";
 
 function cashflowVoorRekening(
   rek: VmeRekening,
@@ -127,38 +128,32 @@ export async function vmeBoekjaarOverzicht(
   vmeId: string,
   boekjaar: BoekjaarPeriode,
 ): Promise<VmeDashboard> {
-  const [tx, { data: uittreksels }, { data: teControlerenRows }, { data: unitRows }] =
-    await Promise.all([
-      metBoekjaarFilter<TxRow>(
-        () =>
-          db
-            .from("transactie")
-            .select(`${TX_KOL}, boekjaar_id`)
-            .eq("vme_id", vmeId)
-            .or(boekjaarOrFilter(boekjaar))
-            .returns<TxRow[]>(),
-        () =>
-          db
-            .from("transactie")
-            .select(TX_KOL)
-            .eq("vme_id", vmeId)
-            .gte("datum", boekjaar.start_datum)
-            .lte("datum", boekjaar.eind_datum)
-            .returns<TxRow[]>(),
-        boekjaar,
-      ),
-      db
+  const [tx, { data: uittreksels }, { data: unitRows }] = await Promise.all([
+    metBoekjaarFilter<TxRow>(
+      () =>
+        db
+          .from("transactie")
+          .select(`${TX_KOL}, boekjaar_id`)
+          .eq("vme_id", vmeId)
+          .or(boekjaarOrFilter(boekjaar))
+          .returns<TxRow[]>(),
+      () =>
+        db
+          .from("transactie")
+          .select(TX_KOL)
+          .eq("vme_id", vmeId)
+          .gte("datum", boekjaar.start_datum)
+          .lte("datum", boekjaar.eind_datum)
+          .returns<TxRow[]>(),
+      boekjaar,
+    ),
+    db
       .from("bankuittreksel")
       .select("rekening, periode_van, periode_tot, saldo_begin, saldo_eind")
       .eq("vme_id", vmeId)
       .lte("periode_van", boekjaar.eind_datum)
       .gte("periode_tot", boekjaar.start_datum)
       .order("periode_van", { ascending: true }),
-    db
-      .from("transactie")
-      .select("soort")
-      .eq("vme_id", vmeId)
-      .or("match_type.eq.onbevestigd,match_type.is.null"),
     db.from("unit").select("id").eq("vme_id", vmeId),
   ]);
 
@@ -182,9 +177,12 @@ export async function vmeBoekjaarOverzicht(
     saldo_eind: number | null;
   }[];
 
-  const bankTeControleren = ((teControlerenRows ?? []) as { soort: string }[])
-    .filter((t) => !GEEN_MATCH_NODIG.has(t.soort))
-    .length;
+  // Enkel wat in DIT boekjaar nog gecontroleerd moet worden.
+  const bankTeControleren = tx.filter(
+    (t) =>
+      (t.match_type === "onbevestigd" || t.match_type == null) &&
+      !GEEN_MATCH_NODIG.has(t.soort),
+  ).length;
 
   return {
     zicht: cashflowVoorRekening("zicht", tx, us),
