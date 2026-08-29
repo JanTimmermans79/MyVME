@@ -74,8 +74,10 @@ export function ContextBar({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2">
-      <span className="text-xs font-medium text-muted-foreground">VME</span>
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="hidden text-xs font-medium text-muted-foreground sm:inline">
+        VME
+      </span>
       {vmes.length > 1 ? (
         <AutoSelect
           name="vme_id"

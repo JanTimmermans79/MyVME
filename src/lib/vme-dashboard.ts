@@ -28,6 +28,11 @@ export interface VmeDashboard {
   totaalUitgaven: number;
   rekeningen: RekeningStand[];
   bankTeControleren: number;
+  aantalVoorschotten: number;
+  aantalTransacties: number;
+  aantalEigenaars: number;
+  aantalHuurders: number;
+  bankSaldo: number;
 }
 
 // Zelfde set als /admin/bank: deze soorten hoeven niet aan een unit gekoppeld.
@@ -52,27 +57,46 @@ export async function vmeBoekjaarOverzicht(
   vmeId: string,
   boekjaar: { start_datum: string; eind_datum: string },
 ): Promise<VmeDashboard> {
-  const [{ data: txData }, { data: uittreksels }, { data: teControlerenRows }] =
-    await Promise.all([
-      db
-        .from("transactie")
-        .select("bedrag, soort, rekening, betaler_type, match_type")
-        .eq("vme_id", vmeId)
-        .gte("datum", boekjaar.start_datum)
-        .lte("datum", boekjaar.eind_datum),
-      db
-        .from("bankuittreksel")
-        .select("rekening, periode_van, periode_tot, saldo_begin, saldo_eind")
-        .eq("vme_id", vmeId)
-        .lte("periode_van", boekjaar.eind_datum)
-        .gte("periode_tot", boekjaar.start_datum)
-        .order("periode_van", { ascending: true }),
-      db
-        .from("transactie")
-        .select("soort")
-        .eq("vme_id", vmeId)
-        .or("match_type.eq.onbevestigd,match_type.is.null"),
-    ]);
+  const [
+    { data: txData },
+    { data: uittreksels },
+    { data: teControlerenRows },
+    { data: unitRows },
+  ] = await Promise.all([
+    db
+      .from("transactie")
+      .select("bedrag, soort, rekening, betaler_type, match_type")
+      .eq("vme_id", vmeId)
+      .gte("datum", boekjaar.start_datum)
+      .lte("datum", boekjaar.eind_datum),
+    db
+      .from("bankuittreksel")
+      .select("rekening, periode_van, periode_tot, saldo_begin, saldo_eind")
+      .eq("vme_id", vmeId)
+      .lte("periode_van", boekjaar.eind_datum)
+      .gte("periode_tot", boekjaar.start_datum)
+      .order("periode_van", { ascending: true }),
+    db
+      .from("transactie")
+      .select("soort")
+      .eq("vme_id", vmeId)
+      .or("match_type.eq.onbevestigd,match_type.is.null"),
+    db.from("unit").select("id").eq("vme_id", vmeId),
+  ]);
+
+  const unitIds = ((unitRows ?? []) as { id: string }[]).map((u) => u.id);
+  const [{ count: aantalEigenaars }, { count: aantalHuurders }] = unitIds.length
+    ? await Promise.all([
+        db
+          .from("eigenaar")
+          .select("id", { count: "exact", head: true })
+          .in("unit_id", unitIds),
+        db
+          .from("huurder")
+          .select("id", { count: "exact", head: true })
+          .in("unit_id", unitIds),
+      ])
+    : [{ count: 0 }, { count: 0 }];
 
   const tx = (txData ?? []) as TxRow[];
   const som = (fn: (t: TxRow) => boolean) =>
@@ -141,6 +165,13 @@ export async function vmeBoekjaarOverzicht(
     .filter((t) => !GEEN_MATCH_NODIG.has(t.soort))
     .length;
 
+  const bankSaldo = round2(
+    rekeningen.reduce(
+      (s, r) => s + (r.saldo_eind != null ? r.saldo_eind : r.mutatie),
+      0,
+    ),
+  );
+
   return {
     opbrengsten,
     totaalOpbrengsten,
@@ -148,5 +179,66 @@ export async function vmeBoekjaarOverzicht(
     totaalUitgaven,
     rekeningen,
     bankTeControleren,
+    aantalVoorschotten: tx.filter((t) => t.soort === "voorschot").length,
+    aantalTransacties: tx.length,
+    aantalEigenaars: aantalEigenaars ?? 0,
+    aantalHuurders: aantalHuurders ?? 0,
+    bankSaldo,
   };
+}
+
+export interface JaarTotaal {
+  label: string;
+  inkomsten: number;
+  uitgaven: number;
+}
+
+const INKOMST_SOORT = new Set([
+  "voorschot",
+  "kapitaalsoproep",
+  "rente",
+]);
+
+/** Inkomsten/uitgaven per boekjaar (max 5, oud -> nieuw) voor de grafiek. */
+export async function jaarlijkseTotalen(
+  db: Db,
+  vmeId: string,
+  boekjaren: { start_datum: string; eind_datum: string }[],
+): Promise<JaarTotaal[]> {
+  const reeks = [...boekjaren]
+    .sort((a, b) => a.start_datum.localeCompare(b.start_datum))
+    .slice(-5);
+  if (reeks.length === 0) return [];
+
+  const van = reeks[0].start_datum;
+  const tot = reeks[reeks.length - 1].eind_datum;
+  const { data } = await db
+    .from("transactie")
+    .select("bedrag, soort, datum")
+    .eq("vme_id", vmeId)
+    .gte("datum", van)
+    .lte("datum", tot);
+  const rows = (data ?? []) as { bedrag: number; soort: string; datum: string }[];
+
+  return reeks.map((bj) => {
+    const inPeriode = rows.filter(
+      (r) => r.datum >= bj.start_datum && r.datum <= bj.eind_datum,
+    );
+    const inkomsten = inPeriode
+      .filter(
+        (r) =>
+          INKOMST_SOORT.has(r.soort) ||
+          (r.soort === "afrekening" && Number(r.bedrag) > 0),
+      )
+      .reduce((s, r) => s + Number(r.bedrag), 0);
+    const uitgaven = inPeriode
+      .filter(
+        (r) =>
+          (r.soort === "kost" || r.soort === "terugbetaling") &&
+          Number(r.bedrag) < 0,
+      )
+      .reduce((s, r) => s + Math.abs(Number(r.bedrag)), 0);
+    const jaar = bj.eind_datum.slice(0, 4);
+    return { label: jaar, inkomsten: round2(inkomsten), uitgaven: round2(uitgaven) };
+  });
 }

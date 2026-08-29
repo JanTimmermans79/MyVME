@@ -7,17 +7,18 @@ import { ContextBar } from "@/components/context-bar";
 const NAV: NavGroup[] = [
   {
     items: [
-      { href: "/admin/dashboard", label: "Dashboard" },
-      { href: "/admin/bank", label: "Bankimport" },
-      { href: "/admin/kosten", label: "Kosten" },
-      { href: "/admin/voorschotten", label: "Voorschotten" },
-      { href: "/admin/tellers", label: "Meterstanden" },
-      { href: "/admin/afrekeningen", label: "Afrekeningen" },
+      { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard" },
+      { href: "/admin/bank", label: "Bankimport", icon: "bank" },
+      { href: "/admin/kosten", label: "Kosten", icon: "kosten" },
+      { href: "/admin/voorschotten", label: "Voorschotten", icon: "voorschotten" },
+      { href: "/admin/tellers", label: "Meterstanden", icon: "meterstanden" },
+      { href: "/admin/afrekeningen", label: "Afrekeningen", icon: "afrekeningen" },
+      { href: "/admin/documenten", label: "Documenten", icon: "documenten" },
     ],
   },
   {
     label: "Beheer",
-    items: [{ href: "/admin/config", label: "Configuratie" }],
+    items: [{ href: "/admin/config", label: "Configuratie", icon: "config" }],
   },
 ];
 
@@ -35,11 +36,12 @@ export default async function WerkLayout({
 
   return (
     <AppShell
-      title="MyVME · Syndicus"
+      title="MyVME"
+      subtitle="Syndicus"
       nav={NAV}
       userLabel={session.email ?? "Syndicus"}
       backHref="/admin"
-      backLabel="← Alle VME's"
+      backLabel="Alle VME's"
       contextBar={
         <ContextBar
           vmes={ctx.vmes}

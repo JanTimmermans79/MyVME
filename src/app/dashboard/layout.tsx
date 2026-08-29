@@ -6,8 +6,8 @@ import { ContextBar } from "@/components/context-bar";
 const NAV: NavGroup[] = [
   {
     items: [
-      { href: "/dashboard", label: "Mijn overzicht" },
-      { href: "/dashboard/contact", label: "Contactgegevens" },
+      { href: "/dashboard", label: "Mijn overzicht", icon: "dashboard" },
+      { href: "/dashboard/contact", label: "Contactgegevens", icon: "contact" },
     ],
   },
 ];
@@ -21,6 +21,7 @@ export default async function DashboardLayout({
   return (
     <AppShell
       title="MyVME"
+      subtitle="Eigenaar"
       nav={NAV}
       userLabel={session.profile?.volledige_naam ?? session.email ?? "Eigenaar"}
       contextBar={

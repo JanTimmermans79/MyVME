@@ -8,11 +8,14 @@ export default function KiesLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-dvh">
-      <header className="border-b bg-card">
+    <div className="min-h-dvh bg-linear-to-b from-app-bg-from to-app-bg-to">
+      <header className="border-b border-border/60 bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-          <Link href="/" className="font-semibold">
-            MyVME · Syndicus
+          <Link href="/" className="flex items-center gap-2 font-semibold">
+            <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
+              M
+            </span>
+            MyVME
           </Link>
           <form action="/auth/signout" method="post">
             <Button type="submit" variant="outline" size="sm">

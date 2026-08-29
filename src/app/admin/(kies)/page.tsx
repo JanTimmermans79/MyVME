@@ -65,7 +65,7 @@ export default async function KiesVmePage() {
                 <input type="hidden" name="vme_id" value={v.id} />
                 <button
                   type="submit"
-                  className="group w-full rounded-xl border bg-card p-4 text-left transition-colors hover:border-primary"
+                  className="group w-full rounded-2xl bg-card p-4 text-left ring-1 ring-foreground/10 transition-all hover:shadow-md hover:ring-primary"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <Building2 className="size-5 text-muted-foreground" />

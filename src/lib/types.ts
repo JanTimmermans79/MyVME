@@ -175,6 +175,18 @@ export interface Verbruik {
   created_at: string;
 }
 
+export interface Document {
+  id: string;
+  vme_id: string;
+  boekjaar_id: string | null;
+  naam: string;
+  pad: string;
+  mimetype: string | null;
+  grootte: number | null;
+  categorie: string | null;
+  created_at: string;
+}
+
 export interface Bankuittreksel {
   id: string;
   vme_id: string;
