@@ -91,6 +91,15 @@ function cashflowVoorRekening(
       label: "Ontvangen afrekeningen",
       bedrag: som((t) => t.soort === "afrekening" && Number(t.bedrag) > 0),
     },
+    {
+      label:
+        rek === "spaar"
+          ? "Overboeking van de zichtrekening"
+          : "Overboeking van de spaarrekening",
+      bedrag: som(
+        (t) => t.soort === "interne_overboeking" && Number(t.bedrag) > 0,
+      ),
+    },
   ].filter((p) => p.bedrag !== 0);
 
   const uitgaven: Post[] = [
@@ -105,6 +114,15 @@ function cashflowVoorRekening(
     {
       label: "Betaalde afrekeningen",
       bedrag: som((t) => t.soort === "afrekening" && Number(t.bedrag) < 0),
+    },
+    {
+      label:
+        rek === "spaar"
+          ? "Overboeking naar de zichtrekening"
+          : "Overboeking naar de spaarrekening",
+      bedrag: som(
+        (t) => t.soort === "interne_overboeking" && Number(t.bedrag) < 0,
+      ),
     },
   ].filter((p) => p.bedrag !== 0);
 
@@ -254,7 +272,9 @@ export async function jaarlijkseTotalen(
     const uitgaven = inPeriode
       .filter(
         (r) =>
-          (r.soort === "kost" || r.soort === "terugbetaling") &&
+          (r.soort === "kost" ||
+            r.soort === "terugbetaling" ||
+            r.soort === "interne_overboeking") &&
           Number(r.bedrag) < 0,
       )
       .reduce((s, r) => s + Math.abs(Number(r.bedrag)), 0);

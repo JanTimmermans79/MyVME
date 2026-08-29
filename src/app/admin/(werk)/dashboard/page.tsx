@@ -180,7 +180,7 @@ export default async function DashboardPage() {
         <StatCard
           label="Uitgaven (spaarrekening)"
           value={euro(Math.abs(overzicht.spaar.totaalUit))}
-          sub="kosten t.l.v. de VME"
+          sub="kosten + overboekingen"
           icon={TrendingDown}
           color="rose"
         />
@@ -287,7 +287,7 @@ export default async function DashboardPage() {
         />
         <RekeningKaart
           titel="VME spaarrekening"
-          omschrijving="Reservefonds: eigenaarsprovisies en kapitaalopvragingen in, VME-kosten uit."
+          omschrijving="Reservefonds: provisies en kapitaalopvragingen in; kosten en overboekingen naar de werkrekening uit."
           cf={overzicht.spaar}
         />
       </div>
