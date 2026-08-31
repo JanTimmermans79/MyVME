@@ -100,6 +100,18 @@ function cashflowVoorRekening(
         (t) => t.soort === "interne_overboeking" && Number(t.bedrag) > 0,
       ),
     },
+    {
+      label: "Overige ontvangsten",
+      bedrag: som(
+        (t) =>
+          Number(t.bedrag) > 0 &&
+          t.soort !== "voorschot" &&
+          t.soort !== "kapitaalsoproep" &&
+          t.soort !== "rente" &&
+          t.soort !== "afrekening" &&
+          t.soort !== "interne_overboeking",
+      ),
+    },
   ].filter((p) => p.bedrag !== 0);
 
   const uitgaven: Post[] = [
@@ -122,6 +134,17 @@ function cashflowVoorRekening(
           : "Overboeking naar de spaarrekening",
       bedrag: som(
         (t) => t.soort === "interne_overboeking" && Number(t.bedrag) < 0,
+      ),
+    },
+    {
+      label: "Overige uitgaven",
+      bedrag: som(
+        (t) =>
+          Number(t.bedrag) < 0 &&
+          t.soort !== "kost" &&
+          t.soort !== "terugbetaling" &&
+          t.soort !== "afrekening" &&
+          t.soort !== "interne_overboeking",
       ),
     },
   ].filter((p) => p.bedrag !== 0);

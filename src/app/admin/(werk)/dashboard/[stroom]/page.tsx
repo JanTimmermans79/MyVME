@@ -4,14 +4,13 @@ import { ChevronLeft } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveContext } from "@/lib/vme-context";
 import { euro, datum } from "@/lib/format";
-import {
-  kostenNaarRijen,
-  opbrengstenNaarRijen,
-  rekeningVanKost,
-} from "@/lib/financien";
+import { opbrengstenNaarRijen } from "@/lib/financien";
 import { hoortBijBoekjaar } from "@/lib/boekjaar-transacties";
 import { NoBoekjaar } from "@/components/no-boekjaar";
-import { FinancieleTabel } from "@/components/financiele-tabel";
+import {
+  FinancieleTabel,
+  type FinancieleRij,
+} from "@/components/financiele-tabel";
 import {
   Card,
   CardContent,
@@ -32,6 +31,12 @@ const STROMEN: Record<
   "spaar-uit": { rekening: "spaar", richting: "uit", titel: "Uitgaven spaarrekening" },
 };
 
+const UIT_LABEL: Record<string, string> = {
+  terugbetaling: "Terugbetalingen",
+  afrekening: "Betaalde afrekeningen",
+  overig: "Overige uitgaven",
+};
+
 export default async function DrilldownPage({
   params,
   searchParams,
@@ -49,51 +54,72 @@ export default async function DrilldownPage({
   const db = createAdminClient();
 
   // ?bj= laat toe een ander boekjaar te bekijken (vanuit de evolutiegrafiek).
-  const boekjaar =
-    (bj && boekjaren.find((b) => b.id === bj)) || actief;
+  const boekjaar = (bj && boekjaren.find((b) => b.id === bj)) || actief;
   const anderBoekjaar = boekjaar.id !== actief.id;
+  const jaar = Number(boekjaar.start_datum.slice(0, 4));
+  const andereRekening = cfg.rekening === "spaar" ? "zichtrekening" : "spaarrekening";
 
-  const groepen: { naam: string; rijen: ReturnType<typeof kostenNaarRijen> }[] = [];
+  // Altijd bank-basis (transacties), zodat dit exact aansluit op de
+  // dashboardkaart van dezelfde rekening (spec §24 — één bron van waarheid).
+  const { data: txAlle } = await db
+    .from("transactie")
+    .select("*")
+    .eq("vme_id", vme.id)
+    .eq("rekening", cfg.rekening)
+    .gte("datum", `${jaar - 1}-01-01`)
+    .returns<Transactie[]>();
+  const tx = (txAlle ?? []).filter((t) => hoortBijBoekjaar(t, boekjaar));
 
-  if (cfg.richting === "uit") {
-    const { data: alle } = await db
-      .from("kosten")
-      .select("*")
-      .eq("boekjaar_id", boekjaar.id)
-      .order("datum", { ascending: false })
-      .returns<Kosten[]>();
-    const kosten = (alle ?? []).filter((k) => rekeningVanKost(k) === cfg.rekening);
-    const perCat = new Map<string, Kosten[]>();
-    for (const k of kosten) {
-      const l = perCat.get(k.categorie) ?? [];
-      l.push(k);
-      perCat.set(k.categorie, l);
-    }
-    for (const [naam, ks] of [...perCat].sort())
-      groepen.push({ naam, rijen: kostenNaarRijen(ks) });
-  } else {
-    const jaar = Number(boekjaar.start_datum.slice(0, 4));
-    const { data: tx } = await db
-      .from("transactie")
-      .select("*")
-      .eq("vme_id", vme.id)
-      .eq("rekening", cfg.rekening)
-      .gt("bedrag", 0)
-      .gte("datum", `${jaar - 1}-01-01`)
-      .returns<Transactie[]>();
-    const rijen = opbrengstenNaarRijen(
-      (tx ?? []).filter((t) => hoortBijBoekjaar(t, boekjaar)),
-      boekjaar,
-      cfg.rekening,
-    );
-    const perSoort = new Map<string, typeof rijen>();
+  const groepen: { naam: string; rijen: FinancieleRij[] }[] = [];
+
+  if (cfg.richting === "in") {
+    const rijen = opbrengstenNaarRijen(tx, boekjaar, cfg.rekening);
+    const per = new Map<string, FinancieleRij[]>();
     for (const r of rijen) {
-      const l = perSoort.get(r.omschrijving.split(" — ")[0]) ?? [];
-      l.push(r);
-      perSoort.set(r.omschrijving.split(" — ")[0], l);
+      const naam = r.omschrijving.split(" — ")[0];
+      (per.get(naam) ?? per.set(naam, []).get(naam)!).push(r);
     }
-    for (const [naam, rs] of [...perSoort].sort())
+    for (const [naam, rs] of [...per].sort()) groepen.push({ naam, rijen: rs });
+  } else {
+    // Categorie van de gekoppelde kost erbij, voor een nettere groepering.
+    const { data: kostenRows } = await db
+      .from("kosten")
+      .select("betaald_met_transactie_id, categorie")
+      .eq("boekjaar_id", boekjaar.id)
+      .returns<Pick<Kosten, "betaald_met_transactie_id" | "categorie">[]>();
+    const catVanTx = new Map(
+      (kostenRows ?? [])
+        .filter((k) => k.betaald_met_transactie_id)
+        .map((k) => [k.betaald_met_transactie_id as string, k.categorie]),
+    );
+
+    const per = new Map<string, FinancieleRij[]>();
+    for (const t of tx) {
+      if (Number(t.bedrag) >= 0) continue;
+      const cat = catVanTx.get(t.id) ?? null;
+      const naam =
+        t.soort === "interne_overboeking"
+          ? `Overboeking naar de ${andereRekening}`
+          : t.soort === "kost"
+            ? (cat ?? "Betalingen aan leveranciers")
+            : (UIT_LABEL[t.soort] ?? t.soort);
+      const rij: FinancieleRij = {
+        id: t.id,
+        datum: t.datum,
+        omschrijving:
+          t.mededeling ?? t.tegenpartij_naam ?? t.soort.replace(/_/g, " "),
+        tegenpartij: t.tegenpartij_naam,
+        categorie: cat,
+        rekening: t.rekening,
+        bedrag: Number(t.bedrag),
+        href: `/admin/financien/transactie/${t.id}`,
+      };
+      (per.get(naam) ?? per.set(naam, []).get(naam)!).push(rij);
+    }
+    for (const [naam, rs] of [...per].sort(([a], [b]) => a.localeCompare(b))) {
+      rs.sort((x, y) => y.datum.localeCompare(x.datum));
       groepen.push({ naam, rijen: rs });
+    }
   }
 
   const totaal = groepen.reduce(
