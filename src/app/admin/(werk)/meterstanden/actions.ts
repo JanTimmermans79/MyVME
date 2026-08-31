@@ -115,11 +115,75 @@ export async function verwijderMeterstand(
   formData: FormData,
 ): Promise<ActionState> {
   return runAdmin(async (db) => {
-    const id = str(formData, "id");
-    const { error } = await db.from("meterstand").delete().eq("id", id);
+    const ids = str(formData, "ids")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const enkel = str(formData, "id");
+    const teVerwijderen = ids.length ? ids : enkel ? [enkel] : [];
+    if (teVerwijderen.length === 0)
+      return { ok: false, error: "Geen meterstand." };
+    const { error } = await db
+      .from("meterstand")
+      .delete()
+      .in("id", teVerwijderen);
     if (error) return { ok: false, error: error.message };
     revalidatePath("/admin/meterstanden");
-    return { ok: true, message: "Meterstand verwijderd." };
+    return {
+      ok: true,
+      message:
+        teVerwijderen.length > 1
+          ? `${teVerwijderen.length} meterstanden verwijderd.`
+          : "Meterstand verwijderd.",
+    };
+  });
+}
+
+/** Past een bestaande opname aan (datum/aanleiding/waarden van de drie tellers). */
+export async function updateMeterstanden(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAdmin(async (db) => {
+    const datum = str(formData, "datum");
+    const aanleiding = str(formData, "aanleiding") || "tussentijds";
+    const huurder_id = optStr(formData, "huurder_id");
+    if (!datum) return { ok: false, error: "Datum is verplicht." };
+
+    const bjStart = str(formData, "boekjaar_start");
+    const bjEind = str(formData, "boekjaar_eind");
+    if (bjStart && bjEind) {
+      const marge = (d: string, dagen: number) => {
+        const t = new Date(`${d}T00:00:00Z`);
+        t.setUTCDate(t.getUTCDate() + dagen);
+        return t.toISOString().slice(0, 10);
+      };
+      if (datum < marge(bjStart, -3) || datum > marge(bjEind, 3))
+        return {
+          ok: false,
+          error: `Datum valt buiten het boekjaar (${bjStart} – ${bjEind}).`,
+        };
+    }
+
+    let n = 0;
+    for (const type of TYPES) {
+      const id = str(formData, `id_${type}`);
+      if (!id) continue;
+      const raw = str(formData, `waarde_${type}`);
+      if (raw === "") continue; // leeg laten = niet wijzigen; verwijderen apart
+      const waarde = num(formData, `waarde_${type}`);
+      if (waarde < 0)
+        return { ok: false, error: "Meterstanden mogen niet negatief zijn." };
+      const { error } = await db
+        .from("meterstand")
+        .update({ datum, waarde, aanleiding, huurder_id })
+        .eq("id", id);
+      if (error) return { ok: false, error: error.message };
+      n += 1;
+    }
+    if (n === 0) return { ok: false, error: "Niets om aan te passen." };
+    revalidatePath("/admin/meterstanden");
+    return { ok: true, message: `${n} meterstand(en) bijgewerkt.` };
   });
 }
 

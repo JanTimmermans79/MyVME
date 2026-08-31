@@ -5,8 +5,6 @@ import { datum, euro } from "@/lib/format";
 import { tellerOverzicht } from "@/lib/verbruik";
 import { NoBoekjaar } from "@/components/no-boekjaar";
 import { TerugLink } from "@/components/terug-link";
-import { ActionForm } from "@/components/action-form";
-import { ConfirmSubmit } from "@/components/confirm-submit";
 import {
   Card,
   CardContent,
@@ -24,8 +22,8 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { Eenheidsprijs, Huurder, Teller, Unit } from "@/lib/types";
-import { verwijderMeterstand } from "./actions";
 import {
+  EditMeterstandGroep,
   EenheidsprijsForm,
   MaakTellersButton,
   MeternummerRij,
@@ -36,12 +34,6 @@ export const metadata = { title: "Meterstanden" };
 
 const m3 = (n: number) =>
   `${n.toLocaleString("nl-BE", { maximumFractionDigits: 1 })} m³`;
-
-const AANLEIDING_LABEL: Record<string, string> = {
-  boekjaareinde: "boekjaareinde",
-  huurderwissel: "huurderwissel",
-  tussentijds: "tussentijds",
-};
 
 export default async function TellersPage() {
   const { vme: active, boekjaar } = await getActiveContext();
@@ -212,48 +204,66 @@ export default async function TellersPage() {
                     </Table>
                   </div>
 
-                  {/* Standen van dit boekjaar */}
-                  {u.regels.some((r) => r.standenDitBoekjaar.length > 0) && (
-                    <div className="rounded-md bg-muted/40 p-2 text-xs">
-                      <span className="font-medium text-muted-foreground">
-                        Standen dit boekjaar
-                      </span>
-                      <ul className="mt-1 space-y-0.5">
-                        {u.regels.flatMap((r) =>
-                          r.standenDitBoekjaar.map((s) => (
-                            <li
-                              key={s.id}
-                              className="flex items-center gap-2 tabular-nums"
-                            >
-                              <span className="w-24 text-muted-foreground">
-                                {r.label}
-                              </span>
-                              <span className="w-20">{datum(s.datum)}</span>
-                              <span className="w-16">{s.waarde} m³</span>
-                              <Badge
-                                variant="secondary"
-                                className="px-1 py-0 text-[10px]"
-                              >
-                                {AANLEIDING_LABEL[s.aanleiding] ?? s.aanleiding}
-                              </Badge>
-                              <ActionForm
-                                action={verwijderMeterstand}
-                                hiddenFields={{ id: s.id }}
-                              >
-                                <ConfirmSubmit
-                                  size="sm"
-                                  variant="ghost"
-                                  message="Meterstand verwijderen?"
-                                >
-                                  ✕
-                                </ConfirmSubmit>
-                              </ActionForm>
-                            </li>
-                          )),
-                        )}
-                      </ul>
-                    </div>
-                  )}
+                  {/* Standen van dit boekjaar — klik een rij om aan te passen */}
+                  {(() => {
+                    const groepen = new Map<
+                      string,
+                      {
+                        datum: string;
+                        aanleiding: string;
+                        huurderId: string | null;
+                        items: { type: string; id: string; waarde: number }[];
+                      }
+                    >();
+                    for (const r of u.regels) {
+                      for (const s of r.standenDitBoekjaar) {
+                        const key = `${s.datum}|${s.aanleiding}`;
+                        const g =
+                          groepen.get(key) ??
+                          {
+                            datum: s.datum,
+                            aanleiding: s.aanleiding,
+                            huurderId: s.huurder_id,
+                            items: [],
+                          };
+                        g.items.push({ type: r.type, id: s.id, waarde: s.waarde });
+                        groepen.set(key, g);
+                      }
+                    }
+                    const lijst = [...groepen.values()].sort((a, b) =>
+                      b.datum.localeCompare(a.datum),
+                    );
+                    if (lijst.length === 0)
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          Nog geen standen dit boekjaar. Gebruik “Meterstanden”
+                          hierboven.
+                        </p>
+                      );
+                    return (
+                      <div className="rounded-md bg-muted/40 p-2">
+                        <div className="mb-1 flex gap-2 px-2 text-[11px] font-medium text-muted-foreground">
+                          <span className="w-20">Datum</span>
+                          <span className="w-24">Koud</span>
+                          <span className="w-24">Warm</span>
+                          <span className="w-24">CV</span>
+                        </div>
+                        {lijst.map((g) => (
+                          <EditMeterstandGroep
+                            key={`${g.datum}|${g.aanleiding}`}
+                            unitNaam={u.unit_naam}
+                            datum={g.datum}
+                            aanleiding={g.aanleiding}
+                            huurderId={g.huurderId}
+                            items={g.items}
+                            huurders={huurdersByUnit.get(u.unit_id) ?? []}
+                            boekjaarStart={boekjaar.start_datum}
+                            boekjaarEind={boekjaar.eind_datum}
+                          />
+                        ))}
+                      </div>
+                    );
+                  })()}
 
                   {/* Meternummers (compact) */}
                   <details className="text-xs">

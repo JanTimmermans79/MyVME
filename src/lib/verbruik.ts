@@ -143,6 +143,7 @@ export interface TellerRegel {
     datum: string;
     waarde: number;
     aanleiding: string;
+    huurder_id: string | null;
   }[];
 }
 
@@ -197,11 +198,15 @@ export async function tellerOverzicht(
   }[];
   const tellerIds = tellers.map((t) => t.id);
 
-  type StandRij = Stand & { id: string; aanleiding: string };
+  type StandRij = Stand & {
+    id: string;
+    aanleiding: string;
+    huurder_id: string | null;
+  };
   const { data: standRows } = tellerIds.length
     ? await db
         .from("meterstand")
-        .select("id, teller_id, datum, waarde, aanleiding")
+        .select("id, teller_id, datum, waarde, aanleiding, huurder_id")
         .in("teller_id", tellerIds)
     : { data: [] as StandRij[] };
   const standen = (standRows ?? []) as StandRij[];
@@ -271,6 +276,7 @@ export async function tellerOverzicht(
               datum: r.datum,
               waarde: Number(r.waarde),
               aanleiding: r.aanleiding,
+              huurder_id: r.huurder_id ?? null,
             });
             if (r.aanleiding === "tussentijds")
               tussentijds.push({

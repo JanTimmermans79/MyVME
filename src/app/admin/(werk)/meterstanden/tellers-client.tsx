@@ -6,9 +6,11 @@ import type { Eenheidsprijs, Huurder, Teller } from "@/lib/types";
 import { EENHEIDSPRIJS_DEFAULTS } from "@/lib/types";
 import { ActionForm } from "@/components/action-form";
 import { Field, SubmitButton } from "@/components/form";
+import { ConfirmSubmit } from "@/components/confirm-submit";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +30,8 @@ import {
   maakTellers,
   setMeternummer,
   nieuweMeterstanden,
+  updateMeterstanden,
+  verwijderMeterstand,
   setEenheidsprijs,
   mazoutprijsUitLeveringen,
 } from "./actions";
@@ -37,6 +41,12 @@ const TYPE_LABEL: Record<string, string> = {
   warm_water: "Warm water",
   cv: "CV / verwarming",
 };
+
+const AANLEIDING_OPTIES = [
+  { value: "boekjaareinde", label: "Einde boekjaar" },
+  { value: "huurderwissel", label: "Huurderwissel" },
+  { value: "tussentijds", label: "Tussentijds" },
+];
 
 export function EenheidsprijsForm({
   vmeId,
@@ -221,6 +231,168 @@ export function NieuweMeterstandDialog({
           <DialogFooter>
             <SubmitButton>Opslaan</SubmitButton>
           </DialogFooter>
+        </ActionForm>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+export interface StandGroepItem {
+  type: string;
+  id: string;
+  waarde: number;
+}
+
+/** Klikbare rij die een bestaande opname (datum + 3 tellers) laat aanpassen. */
+export function EditMeterstandGroep({
+  unitNaam,
+  datum,
+  aanleiding,
+  huurderId,
+  items,
+  huurders,
+  boekjaarStart,
+  boekjaarEind,
+}: {
+  unitNaam: string;
+  datum: string;
+  aanleiding: string;
+  huurderId: string | null;
+  items: StandGroepItem[];
+  huurders: Huurder[];
+  boekjaarStart: string;
+  boekjaarEind: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const waardeVan = (type: string) =>
+    items.find((i) => i.type === type)?.waarde ?? null;
+  const idVan = (type: string) => items.find((i) => i.type === type)?.id ?? null;
+  const alleIds = items.map((i) => i.id).join(",");
+  const datumKort = new Date(`${datum}T00:00:00Z`).toLocaleDateString("nl-BE");
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs tabular-nums hover:bg-muted"
+        >
+          <span className="w-20 text-muted-foreground">{datumKort}</span>
+          {(["koud_water", "warm_water", "cv"] as const).map((t) => {
+            const w = waardeVan(t);
+            return (
+              <span key={t} className="w-24">
+                {w != null ? `${w} m³` : "—"}
+              </span>
+            );
+          })}
+          <Badge variant="secondary" className="px-1 py-0 text-[10px]">
+            {aanleiding}
+          </Badge>
+          <span className="ml-auto text-muted-foreground">bewerken →</span>
+        </button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Opname aanpassen — {unitNaam}</DialogTitle>
+        </DialogHeader>
+        <ActionForm
+          action={updateMeterstanden}
+          hiddenFields={{
+            boekjaar_start: boekjaarStart,
+            boekjaar_eind: boekjaarEind,
+            ...Object.fromEntries(
+              (["koud_water", "warm_water", "cv"] as const)
+                .map((t) => [`id_${t}`, idVan(t)])
+                .filter(([, v]) => v) as [string, string][],
+            ),
+          }}
+          onSuccess={() => setOpen(false)}
+          className="space-y-3"
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field
+              label="Datum"
+              name="datum"
+              type="date"
+              required
+              min={boekjaarStart}
+              max={boekjaarEind}
+              defaultValue={datum}
+            />
+            <div className="space-y-1.5">
+              <Label htmlFor={`edit-aanleiding-${alleIds}`}>Aanleiding</Label>
+              <Select name="aanleiding" defaultValue={aanleiding}>
+                <SelectTrigger
+                  id={`edit-aanleiding-${alleIds}`}
+                  className="w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AANLEIDING_OPTIES.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {huurders.length > 0 && (
+            <div className="space-y-1.5">
+              <Label htmlFor={`edit-huurder-${alleIds}`}>
+                Huurder (bij huurderwissel)
+              </Label>
+              <Select
+                name="huurder_id"
+                defaultValue={huurderId ?? undefined}
+              >
+                <SelectTrigger id={`edit-huurder-${alleIds}`} className="w-full">
+                  <SelectValue placeholder="(geen)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {huurders.map((h) => (
+                    <SelectItem key={h.id} value={h.id}>
+                      {[h.voornaam, h.naam].filter(Boolean).join(" ")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div className="grid gap-3 sm:grid-cols-3">
+            {(["koud_water", "warm_water", "cv"] as const).map((t) =>
+              idVan(t) ? (
+                <Field
+                  key={t}
+                  label={`${TYPE_LABEL[t]} (m³)`}
+                  name={`waarde_${t}`}
+                  inputMode="decimal"
+                  defaultValue={String(waardeVan(t) ?? "")}
+                />
+              ) : null,
+            )}
+          </div>
+          <DialogFooter className="items-center justify-between gap-2 sm:justify-between">
+            <SubmitButton>Opslaan</SubmitButton>
+          </DialogFooter>
+        </ActionForm>
+        <ActionForm
+          action={verwijderMeterstand}
+          hiddenFields={{ ids: alleIds }}
+          onSuccess={() => setOpen(false)}
+          className="border-t pt-3"
+        >
+          <ConfirmSubmit
+            size="sm"
+            variant="ghost"
+            message="Deze opname (alle tellers) verwijderen?"
+          >
+            Opname verwijderen
+          </ConfirmSubmit>
         </ActionForm>
       </DialogContent>
     </Dialog>
