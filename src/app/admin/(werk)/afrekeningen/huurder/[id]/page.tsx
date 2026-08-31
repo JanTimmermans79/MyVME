@@ -24,6 +24,8 @@ import { Badge } from "@/components/ui/badge";
 import type { Afrekening } from "@/lib/types";
 import { HuurderAfrekeningVerstuur } from "./verstuur";
 
+export const metadata = { title: "Afrekening huurder" };
+
 export default async function HuurderAfrekeningDetail({
   params,
   searchParams,
@@ -59,6 +61,12 @@ export default async function HuurderAfrekeningDetail({
 
   const r = saldoRichting(h.saldo);
   const periode = `${datum(h.periode_start)} – ${datum(h.periode_eind)}`;
+
+  // §19 — elke regel wijst naar zijn bron.
+  const lijnHref = (soort: string): string =>
+    soort === "gedeeld"
+      ? `/admin/dashboard/zicht-uit?bj=${boekjaar.id}`
+      : "/admin/meterstanden";
   const lijnenTekst = h.lijnen
     .map(
       (l) =>
@@ -105,7 +113,14 @@ export default async function HuurderAfrekeningDetail({
             <TableBody>
               {h.lijnen.map((l, i) => (
                 <TableRow key={i}>
-                  <TableCell>{l.omschrijving}</TableCell>
+                  <TableCell>
+                    <Link
+                      href={lijnHref(l.soort)}
+                      className="hover:underline"
+                    >
+                      {l.omschrijving} →
+                    </Link>
+                  </TableCell>
                   <TableCell className="text-right">
                     {l.hoeveelheid ?? "—"} {l.eenheid ?? ""}
                   </TableCell>
@@ -123,7 +138,12 @@ export default async function HuurderAfrekeningDetail({
               </TableRow>
               <TableRow>
                 <TableCell colSpan={3}>
-                  Voorschotten betaald (verwacht {euro(h.voorschot_verwacht)})
+                  <Link
+                    href={`/admin/financien/zicht/voorschotcontrole`}
+                    className="hover:underline"
+                  >
+                    Voorschotten betaald (verwacht {euro(h.voorschot_verwacht)}) →
+                  </Link>
                 </TableCell>
                 <TableCell className="text-right">
                   {euro(h.voorschot_ontvangen)}

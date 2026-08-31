@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { euro, datum, saldoRichting } from "@/lib/format";
@@ -23,6 +24,7 @@ import {
 
 export interface AfrekeningRij {
   id: string;
+  unit_id: string;
   unit_naam: string;
   betaler_type: string;
   verschuldigd: number;
@@ -32,6 +34,8 @@ export interface AfrekeningRij {
   ontvanger_email: string | null;
   mail_verzonden_op: string | null;
   mail_status: string | null;
+  reservefonds_ontvangen?: number;
+  kapitaalopvraging?: number;
 }
 
 
@@ -40,7 +44,12 @@ export function AfrekeningTabel({
   context,
 }: {
   rijen: AfrekeningRij[];
-  context: { vme_naam: string; vme_iban: string; boekjaar: string };
+  context: {
+    vme_naam: string;
+    vme_iban: string;
+    boekjaar: string;
+    boekjaar_id: string;
+  };
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -120,12 +129,14 @@ export function AfrekeningTabel({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Unit</TableHead>
-              <TableHead>Betaler</TableHead>
-              <TableHead className="text-right">Verschuldigd</TableHead>
-              <TableHead className="text-right">Ontvangen</TableHead>
+              <TableHead>Appartement</TableHead>
+              <TableHead>Eigenaar</TableHead>
+              <TableHead className="text-right">Reservefonds</TableHead>
+              <TableHead className="text-right">
+                Aandeel eigenaarskosten
+              </TableHead>
+              <TableHead className="text-right">Kapitaalopvraging</TableHead>
               <TableHead className="text-right">Saldo</TableHead>
-              <TableHead>Ontvanger</TableHead>
               <TableHead>Mail</TableHead>
               <TableHead />
             </TableRow>
@@ -135,20 +146,13 @@ export function AfrekeningTabel({
               const richting = saldoRichting(r.saldo);
               return (
                 <TableRow key={r.id}>
-                  <TableCell>{r.unit_naam}</TableCell>
-                  <TableCell className="capitalize">{r.betaler_type}</TableCell>
-                  <TableCell className="text-right">
-                    {euro(r.verschuldigd)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {euro(r.ontvangen)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge
-                      variant={richting.bijbetaling ? "destructive" : "secondary"}
+                  <TableCell>
+                    <Link
+                      href={`/admin/afrekeningen/eigenaar/${r.unit_id}?boekjaar=${context.boekjaar_id}`}
+                      className="font-medium hover:underline"
                     >
-                      {euro(r.saldo)}
-                    </Badge>
+                      {r.unit_naam}
+                    </Link>
                   </TableCell>
                   <TableCell className="text-xs">
                     {r.ontvanger_naam}
@@ -156,6 +160,22 @@ export function AfrekeningTabel({
                     <span className="text-muted-foreground">
                       {r.ontvanger_email ?? "geen e-mail"}
                     </span>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {euro(r.reservefonds_ontvangen ?? 0)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {euro(r.verschuldigd)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {euro(r.kapitaalopvraging ?? 0)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Badge
+                      variant={richting.bijbetaling ? "destructive" : "secondary"}
+                    >
+                      {euro(r.saldo)}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {r.mail_verzonden_op

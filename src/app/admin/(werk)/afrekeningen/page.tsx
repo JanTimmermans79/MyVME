@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveContext } from "@/lib/vme-context";
@@ -24,6 +25,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import type { Afrekening, Eigenaar, Unit } from "@/lib/types";
 import { berekenHuurderAfrekeningen } from "@/lib/huurder-afrekening";
+import { berekenEigenaarAfrekeningen } from "@/lib/afrekening";
 import { berekenEnBewaar } from "./actions";
 import { AfrekeningTabel, type AfrekeningRij } from "./afrekening-client";
 
@@ -69,12 +71,21 @@ export default async function AfrekeningenPage() {
     for (const e of eigenaars ?? [])
       if (!eigenaarByUnit.has(e.unit_id)) eigenaarByUnit.set(e.unit_id, e);
 
+    // Reservefonds-/kapitaalcijfers uit de live berekening.
+    const { regels: eigLive } = await berekenEigenaarAfrekeningen(
+      createAdminClient(),
+      boekjaar.id,
+    );
+    const liveByUnit = new Map(eigLive.map((r) => [r.unit_id, r]));
+
     eigenaarRijen = (afrekeningen ?? [])
       .filter((a) => a.betaler_type === "eigenaar")
       .map((a): AfrekeningRij => {
         const e = eigenaarByUnit.get(a.unit_id);
+        const live = liveByUnit.get(a.unit_id);
         return {
           id: a.id,
+          unit_id: a.unit_id,
           unit_naam: unitNaam.get(a.unit_id) ?? "—",
           betaler_type: "eigenaar",
           verschuldigd: Number(a.verschuldigd),
@@ -86,6 +97,8 @@ export default async function AfrekeningenPage() {
           ontvanger_email: e?.email ?? null,
           mail_verzonden_op: a.mail_verzonden_op,
           mail_status: a.mail_status,
+          reservefonds_ontvangen: live?.reservefonds_ontvangen ?? 0,
+          kapitaalopvraging: live?.kapitaalopvraging ?? 0,
         };
       })
       .sort((x, y) => x.unit_naam.localeCompare(y.unit_naam));
@@ -103,6 +116,13 @@ export default async function AfrekeningenPage() {
 
   return (
     <div className="space-y-6">
+      <Link
+        href="/admin/dashboard"
+        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+      >
+        <ChevronLeft className="size-3.5" /> Terug naar dashboard
+      </Link>
+
       <Card>
         <CardHeader>
           <CardTitle>Jaarafrekening</CardTitle>
@@ -148,11 +168,13 @@ export default async function AfrekeningenPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead>Appartement</TableHead>
                         <TableHead>Huurder</TableHead>
-                        <TableHead>Unit</TableHead>
                         <TableHead>Periode</TableHead>
-                        <TableHead className="text-right">Kosten</TableHead>
-                        <TableHead className="text-right">Betaald</TableHead>
+                        <TableHead className="text-right">Voorschotten</TableHead>
+                        <TableHead className="text-right">Verbruik</TableHead>
+                        <TableHead className="text-right">Diverse</TableHead>
+                        <TableHead className="text-right">Totaal kosten</TableHead>
                         <TableHead className="text-right">Saldo</TableHead>
                         <TableHead />
                       </TableRow>
@@ -161,10 +183,20 @@ export default async function AfrekeningenPage() {
                       {huurderResultaten.map((h) => {
                         const r = saldoRichting(h.saldo);
                         const opgeslagen = opgeslagenHuurder.get(h.huurder_id);
+                        const verbruik = h.lijnen
+                          .filter((l) => l.soort !== "gedeeld")
+                          .reduce((s, l) => s + l.bedrag, 0);
+                        const diverse = h.lijnen
+                          .filter((l) => l.soort === "gedeeld")
+                          .reduce((s, l) => s + l.bedrag, 0);
+                        const href = `/admin/afrekeningen/huurder/${h.huurder_id}?boekjaar=${boekjaar.id}`;
                         return (
                           <TableRow key={h.huurder_id}>
+                            <TableCell>{h.unit_naam}</TableCell>
                             <TableCell className="font-medium">
-                              {h.huurder_naam}
+                              <Link href={href} className="hover:underline">
+                                {h.huurder_naam}
+                              </Link>
                               {h.waarschuwingen.length > 0 && (
                                 <Badge
                                   variant="destructive"
@@ -175,15 +207,20 @@ export default async function AfrekeningenPage() {
                                 </Badge>
                               )}
                             </TableCell>
-                            <TableCell>{h.unit_naam}</TableCell>
                             <TableCell className="text-xs">
                               {datum(h.periode_start)} – {datum(h.periode_eind)}
                             </TableCell>
-                            <TableCell className="text-right">
-                              {euro(h.totaal_kosten)}
-                            </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-right tabular-nums">
                               {euro(h.voorschot_ontvangen)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {euro(verbruik)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {euro(diverse)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {euro(h.totaal_kosten)}
                             </TableCell>
                             <TableCell className="text-right">
                               <Badge
@@ -195,10 +232,7 @@ export default async function AfrekeningenPage() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right text-xs">
-                              <Link
-                                href={`/admin/afrekeningen/huurder/${h.huurder_id}?boekjaar=${boekjaar.id}`}
-                                className="underline"
-                              >
+                              <Link href={href} className="underline">
                                 detail
                               </Link>
                               {opgeslagen?.mail_verzonden_op && (
@@ -210,6 +244,32 @@ export default async function AfrekeningenPage() {
                           </TableRow>
                         );
                       })}
+                      <TableRow className="font-medium">
+                        <TableCell colSpan={3}>Totaal</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {euro(
+                            huurderResultaten.reduce(
+                              (s, h) => s + h.voorschot_ontvangen,
+                              0,
+                            ),
+                          )}
+                        </TableCell>
+                        <TableCell colSpan={2} />
+                        <TableCell className="text-right tabular-nums">
+                          {euro(
+                            huurderResultaten.reduce(
+                              (s, h) => s + h.totaal_kosten,
+                              0,
+                            ),
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {euro(
+                            huurderResultaten.reduce((s, h) => s + h.saldo, 0),
+                          )}
+                        </TableCell>
+                        <TableCell />
+                      </TableRow>
                     </TableBody>
                   </Table>
                 </div>
@@ -221,7 +281,9 @@ export default async function AfrekeningenPage() {
             <CardHeader>
               <CardTitle>Eigenaars ({eigenaarRijen.length})</CardTitle>
               <CardDescription>
-                Opgeslagen bij de laatste berekening.
+                Aandeel in de eigenaarskosten (zichtrekening) opgeslagen bij de
+                laatste berekening; reservefonds en kapitaalopvragingen zijn
+                context. Klik op een appartement voor het detail.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -239,6 +301,7 @@ export default async function AfrekeningenPage() {
                     boekjaar: `${datum(boekjaar.start_datum)} – ${datum(
                       boekjaar.eind_datum,
                     )}`,
+                    boekjaar_id: boekjaar.id,
                   }}
                 />
               )}
