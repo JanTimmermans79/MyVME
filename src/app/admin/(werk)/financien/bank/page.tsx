@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { Eigenaar, Huurder, Transactie, Unit } from "@/lib/types";
+import { hoortBijBoekjaar } from "@/lib/boekjaar-transacties";
 import { suggestie, type Kandidaat } from "@/lib/bank-matching";
 import { BankImporter } from "./bank-importer";
 import { AssignRow } from "./assign-row";
@@ -82,9 +83,7 @@ export default async function BankPage() {
   ];
 
   const unitNaam = new Map((units ?? []).map((u) => [u.id, u.naam]));
-  const onbevestigd = (transacties ?? []).filter(
-    (t) => t.match_type === "onbevestigd" || t.match_type === null,
-  );
+
   // Kosten / interne overboekingen / rente / vorig-jaar-afrekeningen hoeven niet
   // aan een unit gekoppeld te worden -> apart tonen, niet als "te controleren".
   const GEEN_MATCH_NODIG = new Set([
@@ -94,11 +93,25 @@ export default async function BankPage() {
     "afrekening",
     "kapitaalsoproep",
   ]);
+
+  // Enkel verrichtingen van het gekozen boekjaar (datum of expliciet boekjaar_id).
+  const alle = transacties ?? [];
+  const ditBoekjaar = alle.filter((t) => hoortBijBoekjaar(t, boekjaar));
+  const buitenBoekjaarTeControleren = alle.filter(
+    (t) =>
+      !hoortBijBoekjaar(t, boekjaar) &&
+      (t.match_type === "onbevestigd" || t.match_type === null) &&
+      !GEEN_MATCH_NODIG.has(t.soort),
+  ).length;
+
+  const onbevestigd = ditBoekjaar.filter(
+    (t) => t.match_type === "onbevestigd" || t.match_type === null,
+  );
   const teControleren = onbevestigd.filter(
     (t) => !GEEN_MATCH_NODIG.has(t.soort),
   );
   const verwerkt = onbevestigd.filter((t) => GEEN_MATCH_NODIG.has(t.soort));
-  const toegewezen = (transacties ?? []).filter(
+  const toegewezen = ditBoekjaar.filter(
     (t) => t.match_type === "automatisch" || t.match_type === "manueel",
   );
 
@@ -126,6 +139,17 @@ export default async function BankPage() {
       <Card>
         <CardHeader>
           <CardTitle>Te controleren ({teControleren.length})</CardTitle>
+          <CardDescription>
+            Verrichtingen van het boekjaar {datum(boekjaar.start_datum)} –{" "}
+            {datum(boekjaar.eind_datum)}.
+            {buitenBoekjaarTeControleren > 0 && (
+              <>
+                {" "}
+                {buitenBoekjaarTeControleren} te controleren verrichting(en) in
+                andere boekjaren — kies het juiste boekjaar bovenaan.
+              </>
+            )}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {teControleren.length === 0 ? (
