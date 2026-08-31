@@ -135,11 +135,23 @@ export interface VerdeelsleutelAandeel {
   aandeel: number;
 }
 
+export type CategorieGroep = "verbruik" | "divers" | "eigenaar";
+
+export interface Categorie {
+  id: string;
+  vme_id: string;
+  naam: string;
+  groep: CategorieGroep;
+  actief: boolean;
+  created_at: string;
+}
+
 export interface Kosten {
   id: string;
   vme_id: string;
   boekjaar_id: string;
   categorie: string;
+  rekening: VmeRekening;
   omschrijving: string | null;
   bedrag: number;
   datum: string;

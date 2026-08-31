@@ -50,29 +50,26 @@ export async function createKost(
       fileEntry instanceof File ? fileEntry : null,
     );
 
-    const verdeling = str(formData, "verdeling");
-    const betaler_type: "huurder" | "eigenaar" =
-      verdeling === "per_quotiteit" || verdeling === "gelijk_eigenaars"
-        ? "eigenaar"
-        : "huurder";
+    const { verdeling, betaler_type } = verdelingVelden(formData);
+    const rekeningRaw = str(formData, "rekening");
+    const rekening =
+      rekeningRaw === "spaar" || rekeningRaw === "zicht"
+        ? rekeningRaw
+        : betaler_type === "eigenaar"
+          ? "spaar"
+          : "zicht";
 
     const { error } = await db.from("kosten").insert({
       vme_id,
       boekjaar_id,
       categorie,
+      rekening,
       omschrijving: optStr(formData, "omschrijving"),
       bedrag,
       datum,
       leverancier: optStr(formData, "leverancier"),
       verdeelsleutel_id: optStr(formData, "verdeelsleutel_id"),
-      verdeling: [
-        "individueel_verbruik",
-        "gelijk_huurders",
-        "per_quotiteit",
-        "gelijk_eigenaars",
-      ].includes(verdeling)
-        ? verdeling
-        : "gelijk_huurders",
+      verdeling,
       betaler_type,
       document_url,
       bron: "manueel",
@@ -80,7 +77,7 @@ export async function createKost(
     });
     if (error) return { ok: false, error: error.message };
 
-    revalidatePath("/admin/financien/kosten");
+    revalidatePath("/admin/financien");
     revalidatePath("/admin", "layout");
     return { ok: true, message: "Kost geboekt." };
   });
@@ -119,6 +116,7 @@ export async function updateKost(
       return { ok: false, error: "Boekjaar, categorie en datum zijn verplicht." };
 
     const { verdeling, betaler_type } = verdelingVelden(formData);
+    const rekeningRaw = str(formData, "rekening");
 
     const patch: Record<string, unknown> = {
       boekjaar_id,
@@ -130,6 +128,9 @@ export async function updateKost(
       verdeelsleutel_id: optStr(formData, "verdeelsleutel_id"),
       verdeling,
       betaler_type,
+      ...(rekeningRaw === "spaar" || rekeningRaw === "zicht"
+        ? { rekening: rekeningRaw }
+        : {}),
     };
 
     const fileEntry = formData.get("document");
@@ -147,7 +148,7 @@ export async function updateKost(
     const { error } = await db.from("kosten").update(patch).eq("id", id);
     if (error) return { ok: false, error: error.message };
 
-    revalidatePath("/admin/financien/kosten");
+    revalidatePath("/admin/financien");
     revalidatePath("/admin", "layout");
     return { ok: true, message: "Kost bijgewerkt." };
   });
@@ -168,6 +169,7 @@ export async function genereerKostenUitBank(
   return runAdmin(async (db) => {
     const vme_id = str(formData, "vme_id");
     if (!vme_id) return { ok: false, error: "Geen VME." };
+    const rekeningFilter = str(formData, "rekening"); // "" = alle
 
     const [{ data: relaties }, { data: boekjaren }, { data: txs }, { data: reeds }] =
       await Promise.all([
@@ -179,7 +181,7 @@ export async function genereerKostenUitBank(
         db
           .from("transactie")
           .select(
-            "id, datum, bedrag, tegenpartij_naam, tegenpartij_iban, mededeling, soort",
+            "id, datum, bedrag, tegenpartij_naam, tegenpartij_iban, mededeling, soort, rekening",
           )
           .eq("vme_id", vme_id)
           .eq("soort", "kost"),
@@ -220,8 +222,10 @@ export async function genereerKostenUitBank(
       tegenpartij_naam: string | null;
       tegenpartij_iban: string | null;
       mededeling: string | null;
+      rekening: "zicht" | "spaar" | null;
     }[]) {
       if (gekoppeld.has(t.id)) continue;
+      if (rekeningFilter && t.rekening !== rekeningFilter) continue;
 
       const tIban = nz(t.tegenpartij_iban);
       const naam = (t.tegenpartij_naam ?? "").toUpperCase();
@@ -255,6 +259,8 @@ export async function genereerKostenUitBank(
         vme_id,
         boekjaar_id: bj.id,
         categorie: rel.standaard_categorie,
+        rekening:
+          t.rekening ?? (betaler_type === "eigenaar" ? "spaar" : "zicht"),
         bedrag: -Number(t.bedrag), // uitgaand (-) -> kost (+), terugbetaling (+) -> krediet (-)
         datum: t.datum,
         leverancier: t.tegenpartij_naam,
@@ -269,7 +275,7 @@ export async function genereerKostenUitBank(
       else gemaakt += 1;
     }
 
-    revalidatePath("/admin/financien/kosten");
+    revalidatePath("/admin/financien");
     return {
       ok: true,
       message: `${gemaakt} kostenvoorstel(len) aangemaakt, ${overgeslagen} overgeslagen (geen bankrelatie of boekjaar).`,
@@ -288,7 +294,7 @@ export async function confirmKost(
       .update({ status: "bevestigd" })
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/financien/kosten");
+    revalidatePath("/admin/financien");
     return { ok: true, message: "Kost bevestigd." };
   });
 }
@@ -311,7 +317,7 @@ export async function deleteKost(
     if (row?.document_url) {
       await db.storage.from("documenten").remove([row.document_url]);
     }
-    revalidatePath("/admin/financien/kosten");
+    revalidatePath("/admin/financien");
     revalidatePath("/admin", "layout");
     return { ok: true, message: "Kost verwijderd." };
   });

@@ -245,7 +245,7 @@ export default async function DashboardPage() {
               hint: "Kosten en bankimport",
               icon: Receipt,
               color: "amber",
-              href: "/admin/financien/kosten",
+              href: "/admin/financien",
             },
             {
               label: "Documenten",

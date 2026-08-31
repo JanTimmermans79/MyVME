@@ -27,28 +27,62 @@ import {
 } from "@/components/ui/select";
 import { createKost, updateKost, confirmKost, deleteKost } from "./actions";
 
-const CATEGORIEEN = [
-  "verzekering",
-  "elektriciteit",
+const CATEGORIEEN_FALLBACK = [
   "koud water",
   "warm water",
+  "centrale verwarming",
   "mazout",
-  "kuis",
-  "onderhoud lift",
+  "elektriciteit",
+  "schoonmaak",
+  "onderhoud",
+  "administratie",
+  "verzekering",
   "syndicus",
-  "herstellingen",
-  "reservefonds",
-  "andere",
+  "onderhoud lift",
+  "grote werken",
+  "diverse",
 ];
+
+function CategorieSelect({
+  categorieen,
+  defaultValue,
+}: {
+  categorieen: string[];
+  defaultValue?: string;
+}) {
+  const lijst = categorieen.length ? categorieen : CATEGORIEEN_FALLBACK;
+  const opties =
+    defaultValue && !lijst.includes(defaultValue)
+      ? [defaultValue, ...lijst]
+      : lijst;
+  return (
+    <Select name="categorie" defaultValue={defaultValue} required>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder="Kies categorie" />
+      </SelectTrigger>
+      <SelectContent>
+        {opties.map((c) => (
+          <SelectItem key={c} value={c} className="capitalize">
+            {c}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 export function CreateKostForm({
   vmeId,
   boekjaren,
   verdeelsleutels,
+  categorieen,
+  rekening,
 }: {
   vmeId: string;
   boekjaren: Boekjaar[];
   verdeelsleutels: Verdeelsleutel[];
+  categorieen: string[];
+  rekening?: "zicht" | "spaar";
 }) {
   const openEerst = [...boekjaren].sort((a, b) =>
     a.status === b.status ? 0 : a.status === "open" ? -1 : 1,
@@ -58,7 +92,9 @@ export function CreateKostForm({
     <ActionForm
       action={createKost}
       resetOnSuccess
-      hiddenFields={{ vme_id: vmeId }}
+      hiddenFields={
+        rekening ? { vme_id: vmeId, rekening } : { vme_id: vmeId }
+      }
       className="grid gap-3 sm:grid-cols-2"
     >
       <div className="space-y-1.5">
@@ -80,18 +116,7 @@ export function CreateKostForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="categorie">Categorie</Label>
-        <Select name="categorie" required>
-          <SelectTrigger id="categorie" className="w-full">
-            <SelectValue placeholder="Kies categorie" />
-          </SelectTrigger>
-          <SelectContent>
-            {CATEGORIEEN.map((c) => (
-              <SelectItem key={c} value={c}>
-                {c}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <CategorieSelect categorieen={categorieen} />
       </div>
 
       <Field label="Bedrag (EUR)" name="bedrag" inputMode="decimal" required />
@@ -170,10 +195,12 @@ export function EditKostDialog({
   kost,
   boekjaren,
   verdeelsleutels,
+  categorieen = [],
 }: {
   kost: Kosten;
   boekjaren: Boekjaar[];
   verdeelsleutels: Verdeelsleutel[];
+  categorieen?: string[];
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -208,12 +235,25 @@ export function EditKostDialog({
               </SelectContent>
             </Select>
           </div>
-          <Field
-            label="Categorie"
-            name="categorie"
-            defaultValue={kost.categorie}
-            required
-          />
+          <div className="space-y-1.5">
+            <Label htmlFor={`cat-${kost.id}`}>Categorie</Label>
+            <CategorieSelect
+              categorieen={categorieen}
+              defaultValue={kost.categorie}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`rek-${kost.id}`}>Rekening</Label>
+            <Select name="rekening" defaultValue={kost.rekening ?? "zicht"}>
+              <SelectTrigger id={`rek-${kost.id}`} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="zicht">Zichtrekening</SelectItem>
+                <SelectItem value="spaar">Spaarrekening</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Field
             label="Bedrag (EUR)"
             name="bedrag"

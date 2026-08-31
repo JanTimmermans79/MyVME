@@ -1,6 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveContext } from "@/lib/vme-context";
-import { datum } from "@/lib/format";
 import { voorschotControle } from "@/lib/voorschot-controle";
 import { NoBoekjaar } from "@/components/no-boekjaar";
 import { VoorschotcontroleTabel } from "@/components/voorschotcontrole-tabel";
@@ -12,28 +11,27 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export const metadata = { title: "Voorschotcontrole huurders" };
+export const metadata = { title: "Voorschotcontrole eigenaars" };
 
-export default async function VoorschotcontroleHuurdersPage() {
+export default async function Page() {
   const { boekjaar } = await getActiveContext();
   if (!boekjaar) return <NoBoekjaar />;
 
   const regels = (
     await voorschotControle(createAdminClient(), boekjaar.id)
-  ).filter((r) => r.soort === "bewoner");
+  ).filter((r) => r.soort === "reservefonds");
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Voorschotcontrole huurders</CardTitle>
+        <CardTitle className="text-base">Voorschotcontrole eigenaars</CardTitle>
         <CardDescription>
-          Opgelegde huurdersvoorschotten vs. effectief ontvangen op de
-          zichtrekening, pro rata t.e.m. vandaag voor boekjaar{" "}
-          {datum(boekjaar.start_datum)} – {datum(boekjaar.eind_datum)}.
+          Opgelegde reservefonds-provisies vs. effectief ontvangen op de
+          spaarrekening, pro rata t.e.m. vandaag.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <VoorschotcontroleTabel regels={regels} />
+        <VoorschotcontroleTabel regels={regels} toonKapitaal />
       </CardContent>
     </Card>
   );

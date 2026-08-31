@@ -6,15 +6,8 @@ import { cn } from "@/lib/utils";
 
 const ITEMS = [
   { href: "/admin/financien/bank", label: "Bankbestanden" },
-  { href: "/admin/financien/kosten", label: "Kosten" },
-  {
-    href: "/admin/financien/voorschotcontrole-huurders",
-    label: "Voorschotcontrole huurders",
-  },
-  {
-    href: "/admin/financien/voorschotcontrole-eigenaars",
-    label: "Voorschotcontrole eigenaars",
-  },
+  { href: "/admin/financien/zicht", label: "Zichtrekening" },
+  { href: "/admin/financien/spaar", label: "Spaarrekening" },
 ];
 
 export function FinancienNav() {
