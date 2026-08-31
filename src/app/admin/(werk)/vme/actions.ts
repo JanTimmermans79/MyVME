@@ -76,7 +76,7 @@ export async function createVme(
       sameSite: "lax",
     });
     c.delete(ACTIVE_BOEKJAAR_COOKIE);
-    redirect("/admin/config");
+    redirect("/admin/instellingen");
   }
   return res;
 }

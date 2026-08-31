@@ -26,12 +26,14 @@ import { Button } from "@/components/ui/button";
 /** Icoon-namen die via de RSC-grens mogen (functies kunnen dat niet). */
 export const NAV_ICONS = {
   dashboard: LayoutDashboard,
+  financien: Receipt,
   bank: Upload,
   kosten: Receipt,
   voorschotten: Wallet,
   meterstanden: Gauge,
   afrekeningen: Calculator,
   documenten: FileText,
+  instellingen: Settings,
   config: Settings,
   contact: UserRound,
 } satisfies Record<string, LucideIcon>;

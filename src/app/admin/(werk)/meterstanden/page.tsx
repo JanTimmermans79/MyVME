@@ -31,7 +31,7 @@ import {
   NieuweMeterstandDialog,
 } from "./tellers-client";
 
-export const metadata = { title: "Tellers & verbruik" };
+export const metadata = { title: "Meterstanden" };
 
 const m3 = (n: number) =>
   `${n.toLocaleString("nl-BE", { maximumFractionDigits: 1 })} m³`;
@@ -101,7 +101,7 @@ export default async function TellersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold">Tellers &amp; verbruik</h1>
+        <h1 className="text-xl font-semibold">Meterstanden</h1>
         <p className="text-sm text-muted-foreground">
           Boekjaar {datum(boekjaar.start_datum)} – {datum(boekjaar.eind_datum)}.
           Meterstanden geef je binnen dit boekjaar in; de beginstand komt

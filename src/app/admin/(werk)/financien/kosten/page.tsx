@@ -149,7 +149,7 @@ export default async function KostenPage() {
                         <div className="flex items-center justify-end gap-2">
                           {k.document_url && (
                             <Link
-                              href={`/admin/kosten/document?path=${encodeURIComponent(k.document_url)}`}
+                              href={`/admin/financien/kosten/document?path=${encodeURIComponent(k.document_url)}`}
                               target="_blank"
                               className="text-sm underline"
                             >

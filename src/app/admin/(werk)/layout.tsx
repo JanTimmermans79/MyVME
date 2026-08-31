@@ -8,17 +8,17 @@ const NAV: NavGroup[] = [
   {
     items: [
       { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard" },
-      { href: "/admin/bank", label: "Bankimport", icon: "bank" },
-      { href: "/admin/kosten", label: "Kosten", icon: "kosten" },
+      {
+        href: "/admin/financien",
+        label: "Kosten & Opbrengsten",
+        icon: "financien",
+      },
       { href: "/admin/voorschotten", label: "Voorschotten", icon: "voorschotten" },
-      { href: "/admin/tellers", label: "Meterstanden", icon: "meterstanden" },
+      { href: "/admin/meterstanden", label: "Meterstanden", icon: "meterstanden" },
       { href: "/admin/afrekeningen", label: "Afrekeningen", icon: "afrekeningen" },
       { href: "/admin/documenten", label: "Documenten", icon: "documenten" },
+      { href: "/admin/instellingen", label: "Instellingen", icon: "instellingen" },
     ],
-  },
-  {
-    label: "Beheer",
-    items: [{ href: "/admin/config", label: "Configuratie", icon: "config" }],
   },
 ];
 

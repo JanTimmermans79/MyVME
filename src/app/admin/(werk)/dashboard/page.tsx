@@ -112,7 +112,7 @@ function RekeningKaart({
           {!cf.geuploadet ? (
             <span className="text-amber-600">
               Nog geen uittreksel geüpload voor dit boekjaar.{" "}
-              <Link href="/admin/bank" className="underline">
+              <Link href="/admin/financien/bank" className="underline">
                 Uploaden
               </Link>
             </span>
@@ -190,7 +190,7 @@ export default async function DashboardPage() {
           sub="zicht + spaar"
           icon={Landmark}
           color="blue"
-          href="/admin/bank"
+          href="/admin/financien/bank"
         />
         <StatCard
           label="Contacten"
@@ -204,7 +204,7 @@ export default async function DashboardPage() {
 
       {overzicht.bankTeControleren > 0 && (
         <Link
-          href="/admin/bank"
+          href="/admin/financien/bank"
           className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
         >
           <AlertTriangle className="size-4 text-amber-600" />
@@ -238,14 +238,14 @@ export default async function DashboardPage() {
               hint: "Verbruik invoeren",
               icon: Gauge,
               color: "blue",
-              href: "/admin/tellers",
+              href: "/admin/meterstanden",
             },
             {
               label: "Financiën",
               hint: "Kosten en bankimport",
               icon: Receipt,
               color: "amber",
-              href: "/admin/kosten",
+              href: "/admin/financien/kosten",
             },
             {
               label: "Documenten",

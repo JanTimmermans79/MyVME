@@ -8,45 +8,45 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export const metadata = { title: "Configuratie" };
+export const metadata = { title: "Instellingen" };
 
 const GROEPEN: { titel: string; items: { href: string; label: string; hint: string }[] }[] =
   [
     {
       titel: "VME",
       items: [
-        { href: "/admin/vme", label: "VME-instellingen", hint: "Naam, adres, IBAN's, aantal kavels" },
+        { href: "/admin/vme", label: "VME-gegevens", hint: "Naam, adres, IBAN's, aantal kavels" },
         { href: "/admin/boekjaren", label: "Boekjaren", hint: "Periodes openen, afsluiten, verwijderen" },
       ],
     },
     {
       titel: "Structuur",
       items: [
-        { href: "/admin/units", label: "Wooneenheden", hint: "Appartementen van deze VME" },
-        { href: "/admin/eigenaars", label: "Eigenaars", hint: "Eigenaar per wooneenheid + login" },
+        { href: "/admin/units", label: "Appartementen", hint: "Wooneenheden van deze VME" },
+        { href: "/admin/eigenaars", label: "Eigenaars", hint: "Eigenaar per appartement + login" },
         { href: "/admin/huurders", label: "Huurders", hint: "Huurder, contactgegevens, huurperiode" },
       ],
     },
     {
       titel: "Verrekening",
       items: [
-        { href: "/admin/verdeelsleutels", label: "Verdeelsleutels", hint: "Quotiteit-aandelen per unit" },
-        { href: "/admin/bankrelaties", label: "Bankrelaties", hint: "Leveranciers + standaardverdeling" },
+        { href: "/admin/bankrelaties", label: "Leveranciers", hint: "Standaard toewijzing + verdeelwijze" },
+        { href: "/admin/verdeelsleutels", label: "Verdeelsleutels", hint: "Quotiteit-aandelen per appartement" },
         { href: "/admin/mazout", label: "Mazout", hint: "Stookolieleveringen en prijs" },
       ],
     },
   ];
 
-export default async function ConfigPage() {
+export default async function InstellingenPage() {
   const { vme } = await getActiveContext();
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold">Configuratie</h1>
+        <h1 className="text-xl font-semibold">Instellingen</h1>
         <p className="text-sm text-muted-foreground">
-          Beheer van {vme?.naam}. Deze gegevens blijven gelden over de boekjaren
-          heen.
+          Centrale gegevens van {vme?.naam}. Deze worden hier één keer beheerd en
+          overal in de app hergebruikt.
         </p>
       </div>
 

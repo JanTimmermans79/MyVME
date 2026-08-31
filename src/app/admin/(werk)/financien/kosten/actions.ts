@@ -80,7 +80,7 @@ export async function createKost(
     });
     if (error) return { ok: false, error: error.message };
 
-    revalidatePath("/admin/kosten");
+    revalidatePath("/admin/financien/kosten");
     revalidatePath("/admin", "layout");
     return { ok: true, message: "Kost geboekt." };
   });
@@ -147,7 +147,7 @@ export async function updateKost(
     const { error } = await db.from("kosten").update(patch).eq("id", id);
     if (error) return { ok: false, error: error.message };
 
-    revalidatePath("/admin/kosten");
+    revalidatePath("/admin/financien/kosten");
     revalidatePath("/admin", "layout");
     return { ok: true, message: "Kost bijgewerkt." };
   });
@@ -269,7 +269,7 @@ export async function genereerKostenUitBank(
       else gemaakt += 1;
     }
 
-    revalidatePath("/admin/kosten");
+    revalidatePath("/admin/financien/kosten");
     return {
       ok: true,
       message: `${gemaakt} kostenvoorstel(len) aangemaakt, ${overgeslagen} overgeslagen (geen bankrelatie of boekjaar).`,
@@ -288,7 +288,7 @@ export async function confirmKost(
       .update({ status: "bevestigd" })
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/kosten");
+    revalidatePath("/admin/financien/kosten");
     return { ok: true, message: "Kost bevestigd." };
   });
 }
@@ -311,7 +311,7 @@ export async function deleteKost(
     if (row?.document_url) {
       await db.storage.from("documenten").remove([row.document_url]);
     }
-    revalidatePath("/admin/kosten");
+    revalidatePath("/admin/financien/kosten");
     revalidatePath("/admin", "layout");
     return { ok: true, message: "Kost verwijderd." };
   });

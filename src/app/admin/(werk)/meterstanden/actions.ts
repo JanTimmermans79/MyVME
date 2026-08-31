@@ -26,7 +26,7 @@ export async function maakTellers(
         { onConflict: "unit_id,type", ignoreDuplicates: true },
       );
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/tellers");
+    revalidatePath("/admin/meterstanden");
     return { ok: true, message: "Tellers aangemaakt." };
   });
 }
@@ -43,7 +43,7 @@ export async function setMeternummer(
       .update({ meternummer: optStr(formData, "meternummer") })
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/tellers");
+    revalidatePath("/admin/meterstanden");
     return { ok: true, message: "Opgeslagen." };
   });
 }
@@ -105,7 +105,7 @@ export async function nieuweMeterstanden(
 
     const { error } = await db.from("meterstand").insert(rows);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/tellers");
+    revalidatePath("/admin/meterstanden");
     return { ok: true, message: `${rows.length} meterstand(en) opgeslagen.` };
   });
 }
@@ -118,7 +118,7 @@ export async function verwijderMeterstand(
     const id = str(formData, "id");
     const { error } = await db.from("meterstand").delete().eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/tellers");
+    revalidatePath("/admin/meterstanden");
     return { ok: true, message: "Meterstand verwijderd." };
   });
 }
@@ -145,7 +145,7 @@ export async function setEenheidsprijs(
       .from("eenheidsprijs")
       .upsert(rec, { onConflict: "vme_id,boekjaar_id" });
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/tellers");
+    revalidatePath("/admin/meterstanden");
     return { ok: true, message: "Eenheidsprijzen opgeslagen." };
   });
 }
@@ -209,7 +209,7 @@ export async function mazoutprijsUitLeveringen(
       .from("eenheidsprijs")
       .upsert(rec, { onConflict: "vme_id,boekjaar_id" });
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/tellers");
+    revalidatePath("/admin/meterstanden");
     return {
       ok: true,
       message: `Mazoutprijs ingesteld op € ${rec.mazoutprijs_per_liter.toFixed(4)}/l (gewogen gemiddelde).`,

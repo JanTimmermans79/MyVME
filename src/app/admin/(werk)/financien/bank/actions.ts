@@ -222,7 +222,7 @@ export async function importTransacties(
     const teControleren = nieuw.filter(
       (n) => n.match_type === "onbevestigd",
     ).length;
-    revalidatePath("/admin/bank");
+    revalidatePath("/admin/financien/bank");
     revalidatePath("/admin", "layout");
     return {
       ok: true,
@@ -254,7 +254,7 @@ export async function assignTransactie(
 
     const { error } = await db.from("transactie").update(patch).eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/bank");
+    revalidatePath("/admin/financien/bank");
     revalidatePath("/admin", "layout");
     return { ok: true, message: "Verrichting toegewezen." };
   });
@@ -273,7 +273,7 @@ export async function setTransactieSoort(
       .update({ soort })
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/bank");
+    revalidatePath("/admin/financien/bank");
     return { ok: true, message: "Soort aangepast." };
   });
 }
@@ -287,7 +287,7 @@ export async function setTransactieBoekjaar(id: string, boekjaarId: string) {
       .update({ boekjaar_id: boekjaarId || null })
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/bank");
+    revalidatePath("/admin/financien/bank");
     revalidatePath("/admin", "layout");
     return { ok: true, message: "Boekjaar aangepast." };
   });
@@ -308,7 +308,7 @@ export async function ontkoppelTransactie(
       })
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/bank");
+    revalidatePath("/admin/financien/bank");
     revalidatePath("/admin", "layout");
     return { ok: true, message: "Toewijzing ongedaan gemaakt." };
   });
@@ -322,7 +322,7 @@ export async function deleteTransactie(
     const id = str(formData, "id");
     const { error } = await db.from("transactie").delete().eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/bank");
+    revalidatePath("/admin/financien/bank");
     revalidatePath("/admin", "layout");
     return { ok: true, message: "Verrichting verwijderd." };
   });
