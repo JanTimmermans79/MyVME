@@ -130,6 +130,17 @@ export default async function AfrekeningenPage() {
     })),
   );
 
+  const laatsteMeting = [
+    ...new Set(
+      alleWaarschuwingen
+        .map(
+          (w) => w.tekst.match(/tussentijdse meting van (\d{4}-\d{2}-\d{2})/)?.[1],
+        )
+        .filter((d): d is string => Boolean(d)),
+    ),
+  ].sort().at(-1);
+  const boekjaarLoopt = boekjaar != null && boekjaar.status !== "afgesloten";
+
   return (
     <div className="space-y-6">
       <Link
@@ -163,6 +174,22 @@ export default async function AfrekeningenPage() {
           </div>
         </CardContent>
       </Card>
+
+      {boekjaarLoopt && (
+        <div className="rounded-lg border border-sky-500/40 bg-sky-500/10 p-3 text-sm">
+          <p className="font-medium">
+            Tussentijdse stand — dit boekjaar is nog niet afgesloten
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            De verbruikskosten zijn berekend t.e.m. de laatste meterstand
+            {laatsteMeting ? ` (${datum(laatsteMeting)})` : ""}. De wintermaanden
+            zitten er dus al in; de latere maanden nog niet. Ook de gedeelde
+            kosten en de ontvangen voorschotten lopen nog verder op tot 31/10.
+            De definitieve eindafrekening maak je nadat het boekjaar is afgesloten
+            en de eindstanden zijn ingevoerd.
+          </p>
+        </div>
+      )}
 
       {alleWaarschuwingen.length > 0 && (
         <Card className="border-amber-500/40">

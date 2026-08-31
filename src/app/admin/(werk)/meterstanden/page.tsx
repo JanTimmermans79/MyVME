@@ -282,28 +282,36 @@ export default async function TellersPage() {
 
                   {/* Tussentijdse controle: verbruik op schema? */}
                   {u.geraamdeJaarkost != null && u.voorschotJaar > 0 && (
-                    <p className="flex flex-wrap items-center gap-2 text-sm">
-                      <span className="text-muted-foreground">
-                        Geraamd jaarverbruik (o.b.v. {datum(u.laatsteMeting)}):
-                      </span>
-                      <strong className="tabular-nums">
-                        {euro(u.geraamdeJaarkost)}
-                      </strong>
-                      <span className="text-muted-foreground">
-                        · jaarvoorschot {euro(u.voorschotJaar)}
-                      </span>
-                      <Badge
-                        variant={
-                          u.geraamdeJaarkost > u.voorschotJaar
-                            ? "destructive"
-                            : "secondary"
-                        }
-                      >
-                        {u.geraamdeJaarkost > u.voorschotJaar
-                          ? "verbruik boven voorschot"
-                          : "op schema"}
-                      </Badge>
-                    </p>
+                    <div className="space-y-1 text-sm">
+                      <p className="flex flex-wrap items-center gap-2">
+                        <span className="text-muted-foreground">
+                          Geraamd jaarverbruik (o.b.v. {datum(u.laatsteMeting)}):
+                        </span>
+                        <strong className="tabular-nums">
+                          {euro(u.geraamdeJaarkost)}
+                        </strong>
+                        <span className="text-muted-foreground">
+                          · jaarvoorschot {euro(u.voorschotJaar)}
+                        </span>
+                        <Badge
+                          variant={
+                            u.geraamdeJaarkost > u.voorschotJaar
+                              ? "destructive"
+                              : "secondary"
+                          }
+                        >
+                          {u.geraamdeJaarkost > u.voorschotJaar
+                            ? "verbruik boven voorschot"
+                            : "op schema"}
+                        </Badge>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Lineaire raming (verbruik tot nu × heel jaar / verstreken
+                        dagen). Zit de stookseizoen grotendeels in de meting, dan
+                        is dit eerder een bovengrens — de resterende maanden
+                        verbruiken meestal minder.
+                      </p>
+                    </div>
                   )}
                 </CardContent>
               )}
