@@ -147,26 +147,38 @@ async function meterDelta(
     .select("datum, waarde, aanleiding")
     .eq("teller_id", teller.id)
     .order("datum", { ascending: true });
-  const alle = (standen ?? []) as {
-    datum: string;
-    waarde: number;
-    aanleiding: string | null;
-  }[];
-  // Jaarafrekening rekent met afrekeningswaarden (boekjaareinde / huurderwissel),
-  // niet met tussentijdse controlestanden. Enkel terugvallen op tussentijds als
-  // er anders te weinig data is.
-  const grens = alle.filter((r) => r.aanleiding !== "tussentijds");
-  const rows = grens.length >= 2 ? grens : alle;
-  if (rows.length < 2)
+  type Stand = { datum: string; waarde: number; aanleiding: string | null };
+  const alle = (standen ?? []) as Stand[];
+  if (alle.length < 2)
     return {
       delta: 0,
       waarschuwing: `Onvoldoende meterstanden voor "${type}".`,
     };
 
-  const voor = [...rows].reverse().find((r) => r.datum <= periodeStart) ?? rows[0];
-  const na =
-    [...rows].reverse().find((r) => r.datum <= periodeEind) ??
-    rows[rows.length - 1];
+  const kies = (rows: Stand[]) => {
+    const voor =
+      [...rows].reverse().find((r) => r.datum <= periodeStart) ?? rows[0];
+    const na =
+      [...rows].reverse().find((r) => r.datum <= periodeEind) ??
+      rows[rows.length - 1];
+    return { voor, na };
+  };
+
+  // Eerst met afrekeningswaarden (boekjaareinde / huurderwissel).
+  const grens = alle.filter((r) => r.aanleiding !== "tussentijds");
+  let { voor, na } = grens.length >= 2 ? kies(grens) : kies(alle);
+  let voorlopig = false;
+
+  // Geen definitieve eindstand voor deze periode? Val terug op de laatste
+  // (tussentijdse) meting zodat het verbruik toch voorlopig zichtbaar is.
+  if (voor === na) {
+    const fb = kies(alle);
+    if (fb.voor !== fb.na) {
+      voor = fb.voor;
+      na = fb.na;
+      voorlopig = true;
+    }
+  }
 
   if (voor === na)
     return {
@@ -178,9 +190,14 @@ async function meterDelta(
   if (delta < 0)
     return {
       delta: 0,
-      waarschuwing: `Negatief verbruik voor "${type}" (meter vervangen?).`,
+      waarschuwing: `Negatief verbruik voor "${type}" (meter vervangen of foute stand?).`,
     };
-  return { delta: round3(delta), waarschuwing: null };
+  return {
+    delta: round3(delta),
+    waarschuwing: voorlopig
+      ? `Voorlopig verbruik voor "${type}": nog geen definitieve eindstand, tussentijdse meting van ${na.datum} gebruikt.`
+      : null,
+  };
 }
 
 async function berekenVoorHuurder(
