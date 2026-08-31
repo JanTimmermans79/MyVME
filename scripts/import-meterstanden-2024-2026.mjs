@@ -130,25 +130,17 @@ const main = async () => {
       r.aanleiding = "tussentijds";
     }
   }
-  // --- (3) App 4 huurderwissel 01/07/2025: standen te hoog t.o.v. Jan's tabel
-  //          (60279 > 59210 in okt). Gerecht via lineaire interpolatie tussen
-  //          31/10/2024 en 02/10/2025 (243/336 dagen). ----------------------
-  const A4_FIX = { cv: 58240, warm_water: 334, koud_water: 484 };
-  for (const [type, nieuw] of Object.entries(A4_FIX)) {
-    const r = (perTeller.get(tellerId("Appartement 4", type)) ?? []).find(
-      (x) => x.datum === "2025-07-01" && x.aanleiding === "huurderwissel",
-    );
-    if (r && r.waarde !== nieuw) {
-      updates.push({
-        id: r.id,
-        patch: { waarde: nieuw },
-        wat: `${type} App4 01/07/2025 ${r.waarde} -> ${nieuw} (interpolatie)`,
-      });
-      r.waarde = nieuw;
-    }
-  }
-  // --- (4) bekende foutieve cel in Jan's tabel: negeren --------------------
-  const NEGEER = new Set(["Appartement 3|cv|2024-02-20"]);
+  // --- (3) bekende foutieve cellen in Jan's tabel: negeren ----------------
+  //   App3 CV 20/02/2024 = 43319 : hoger dan de juli-stand -> onmogelijk.
+  //   App4 rij "02/10/2025" (CV 59210 / WW 335 / KW 486) : lager dan de
+  //     officiële, met foto bevestigde huurderwisselstand van 15/06/2025
+  //     (CV 60279 / WW 340 / KW 495).
+  const NEGEER = new Set([
+    "Appartement 3|cv|2024-02-20",
+    "Appartement 4|cv|2025-10-02",
+    "Appartement 4|warm_water|2025-10-02",
+    "Appartement 4|koud_water|2025-10-02",
+  ]);
 
   for (const [type, perDatum] of Object.entries(DATA)) {
     const order = type === "cv" ? CV_ORDER : WK_ORDER;
