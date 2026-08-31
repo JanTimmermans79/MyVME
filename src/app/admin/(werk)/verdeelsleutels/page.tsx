@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { TerugLink } from "@/components/terug-link";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveVme } from "@/lib/vme-context";
 import { NoVme } from "@/components/no-vme";
@@ -55,6 +56,7 @@ export default async function VerdeelsleutelsPage() {
 
   return (
     <div className="space-y-6">
+      <TerugLink href="/admin/instellingen">Instellingen</TerugLink>
       <Card>
         <CardHeader>
           <CardTitle>Nieuwe verdeelsleutel</CardTitle>

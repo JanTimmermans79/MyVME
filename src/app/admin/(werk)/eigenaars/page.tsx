@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { TerugLink } from "@/components/terug-link";
 import { getActiveVme } from "@/lib/vme-context";
 import { NoVme } from "@/components/no-vme";
 import {
@@ -47,6 +48,7 @@ export default async function EigenaarsPage() {
 
   return (
     <div className="space-y-6">
+      <TerugLink href="/admin/instellingen">Instellingen</TerugLink>
       <Card>
         <CardHeader>
           <CardTitle>Nieuwe eigenaar</CardTitle>

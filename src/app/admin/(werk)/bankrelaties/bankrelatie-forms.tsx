@@ -161,7 +161,7 @@ export function CreateBankrelatieForm({
       className="space-y-3"
     >
       <Fields verdeelsleutels={verdeelsleutels} />
-      <SubmitButton>Bankrelatie toevoegen</SubmitButton>
+      <SubmitButton>Leverancier toevoegen</SubmitButton>
     </ActionForm>
   );
 }
@@ -183,7 +183,7 @@ export function EditBankrelatieDialog({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Bankrelatie bewerken</DialogTitle>
+          <DialogTitle>Leverancier bewerken</DialogTitle>
         </DialogHeader>
         <ActionForm
           action={updateBankrelatie}

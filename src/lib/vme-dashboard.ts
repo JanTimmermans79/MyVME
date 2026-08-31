@@ -41,7 +41,7 @@ export interface VmeDashboard {
   aantalHuurders: number;
 }
 
-// Zelfde set als /admin/bank: deze soorten hoeven niet aan een unit gekoppeld.
+// Zelfde set als de bankpagina: deze soorten hoeven niet aan een unit gekoppeld.
 const GEEN_MATCH_NODIG = new Set([
   "kost",
   "interne_overboeking",

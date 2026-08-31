@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { TerugLink } from "@/components/terug-link";
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveVme } from "@/lib/vme-context";
@@ -76,12 +77,9 @@ export default async function HuurderAfrekeningDetail({
 
   return (
     <div className="space-y-6">
-      <Link
-        href={`/admin/afrekeningen?boekjaar=${boekjaar.id}`}
-        className="text-sm text-muted-foreground underline"
-      >
-        ← Alle afrekeningen
-      </Link>
+      <TerugLink href={`/admin/afrekeningen?boekjaar=${boekjaar.id}`}>
+        Alle afrekeningen
+      </TerugLink>
 
       <Card>
         <CardHeader>

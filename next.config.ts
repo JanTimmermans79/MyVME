@@ -9,20 +9,17 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "10mb",
     },
   },
-  // Fase A/B: hoofdmenu-herstructurering (spec §2). Oude paden blijven werken.
+  // Menu-herstructurering fase 3 (spec §2). Deze paden waren vóór de
+  // herstructurering in gebruik; de redirects houden oude bookmarks levend.
   async redirects() {
     return [
-      { source: "/admin/bank", destination: "/admin/financien/bank", permanent: false },
-      { source: "/admin/bank/:path*", destination: "/admin/financien/bank/:path*", permanent: false },
-      { source: "/admin/kosten/document", destination: "/admin/financien/document", permanent: false },
-      { source: "/admin/kosten", destination: "/admin/financien/zicht/kosten", permanent: false },
-      { source: "/admin/financien/kosten/document", destination: "/admin/financien/document", permanent: false },
-      { source: "/admin/financien/kosten", destination: "/admin/financien/zicht/kosten", permanent: false },
-      { source: "/admin/financien/voorschotcontrole-huurders", destination: "/admin/financien/zicht/voorschotcontrole", permanent: false },
-      { source: "/admin/financien/voorschotcontrole-eigenaars", destination: "/admin/financien/spaar/voorschotcontrole", permanent: false },
-      { source: "/admin/tellers", destination: "/admin/meterstanden", permanent: false },
-      { source: "/admin/tellers/:path*", destination: "/admin/meterstanden/:path*", permanent: false },
-      { source: "/admin/config", destination: "/admin/instellingen", permanent: false },
+      { source: "/admin/bank", destination: "/admin/financien/bank", permanent: true },
+      { source: "/admin/bank/:path*", destination: "/admin/financien/bank/:path*", permanent: true },
+      { source: "/admin/kosten/document", destination: "/admin/financien/document", permanent: true },
+      { source: "/admin/kosten", destination: "/admin/financien/zicht/kosten", permanent: true },
+      { source: "/admin/tellers", destination: "/admin/meterstanden", permanent: true },
+      { source: "/admin/tellers/:path*", destination: "/admin/meterstanden/:path*", permanent: true },
+      { source: "/admin/config", destination: "/admin/instellingen", permanent: true },
     ];
   },
 };

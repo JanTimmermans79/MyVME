@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { TerugLink } from "@/components/terug-link";
 import { ActionForm } from "@/components/action-form";
 import { Field, SubmitButton } from "@/components/form";
 import { ConfirmSubmit } from "@/components/confirm-submit";
@@ -47,12 +47,7 @@ export default async function VerdeelsleutelDetail({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/admin/verdeelsleutels"
-        className="text-sm text-muted-foreground underline"
-      >
-        ← Alle verdeelsleutels
-      </Link>
+      <TerugLink href="/admin/verdeelsleutels">Verdeelsleutels</TerugLink>
 
       <Card>
         <CardHeader>

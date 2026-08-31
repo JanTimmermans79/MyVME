@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { TerugLink } from "@/components/terug-link";
 import { getActiveVme } from "@/lib/vme-context";
 import { NoVme } from "@/components/no-vme";
 import {
@@ -23,7 +24,7 @@ import {
   EditBankrelatieDialog,
 } from "./bankrelatie-forms";
 
-export const metadata = { title: "Bankrelaties" };
+export const metadata = { title: "Leveranciers" };
 
 export default async function BankrelatiesPage() {
   const { active } = await getActiveVme();
@@ -49,9 +50,10 @@ export default async function BankrelatiesPage() {
 
   return (
     <div className="space-y-6">
+      <TerugLink href="/admin/instellingen">Instellingen</TerugLink>
       <Card>
         <CardHeader>
-          <CardTitle>Nieuwe bankrelatie</CardTitle>
+          <CardTitle>Nieuwe leverancier</CardTitle>
           <CardDescription>
             Configureer bekende tegenpartijen (Watergroep, mazoutleverancier,
             elektriciteit, …). Bij de bankimport wordt een betaling naar/van deze
@@ -68,12 +70,12 @@ export default async function BankrelatiesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Bankrelaties ({relaties?.length ?? 0})</CardTitle>
+          <CardTitle>Leveranciers ({relaties?.length ?? 0})</CardTitle>
         </CardHeader>
         <CardContent>
           {!relaties || relaties.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Nog geen bankrelaties.
+              Nog geen leveranciers.
             </p>
           ) : (
             <div className="overflow-x-auto">

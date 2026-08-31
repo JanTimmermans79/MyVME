@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { TerugLink } from "@/components/terug-link";
 import { getActiveVme } from "@/lib/vme-context";
 import { datum } from "@/lib/format";
 import { NoVme } from "@/components/no-vme";
@@ -50,6 +51,7 @@ export default async function HuurdersPage() {
 
   return (
     <div className="space-y-6">
+      <TerugLink href="/admin/instellingen">Instellingen</TerugLink>
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>

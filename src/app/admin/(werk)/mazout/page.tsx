@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { TerugLink } from "@/components/terug-link";
 import { getActiveContext } from "@/lib/vme-context";
 import { euro, datum } from "@/lib/format";
 import { NoBoekjaar } from "@/components/no-boekjaar";
@@ -50,6 +51,7 @@ export default async function MazoutPage() {
 
   return (
     <div className="space-y-6">
+      <TerugLink href="/admin/instellingen">Instellingen</TerugLink>
       <Card>
         <CardHeader>
           <CardTitle>Nieuwe mazoutlevering</CardTitle>
