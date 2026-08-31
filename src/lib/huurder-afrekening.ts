@@ -132,6 +132,8 @@ async function meterDelta(
   type: TellerType,
   periodeStart: string,
   periodeEind: string,
+  huurderId: string | null,
+  vorigeHuurderId: string | null,
 ): Promise<{ delta: number; waarschuwing: string | null }> {
   const { data: teller } = await db
     .from("teller")
@@ -144,10 +146,15 @@ async function meterDelta(
 
   const { data: standen } = await db
     .from("meterstand")
-    .select("datum, waarde, aanleiding")
+    .select("datum, waarde, aanleiding, huurder_id")
     .eq("teller_id", teller.id)
     .order("datum", { ascending: true });
-  type Stand = { datum: string; waarde: number; aanleiding: string | null };
+  type Stand = {
+    datum: string;
+    waarde: number;
+    aanleiding: string | null;
+    huurder_id: string | null;
+  };
   const alle = (standen ?? []) as Stand[];
   if (alle.length < 2)
     return {
@@ -166,19 +173,47 @@ async function meterDelta(
 
   // Eerst met afrekeningswaarden (boekjaareinde / huurderwissel).
   const grens = alle.filter((r) => r.aanleiding !== "tussentijds");
-  let { voor, na } = grens.length >= 2 ? kies(grens) : kies(alle);
-  let voorlopig = false;
+  const basis = grens.length >= 2 ? kies(grens) : kies(alle);
 
-  // Geen definitieve eindstand voor deze periode? Val terug op de laatste
+  // Een huurderwissel-stand op naam is de eindstand van die huurder én de
+  // beginstand van de volgende — ongeacht op welke dag de meter is opgenomen.
+  // Enkel gebruiken als de opname na de datum-gebaseerde beginstand valt (dus
+  // binnen deze afrekeningsperiode, niet die van een vorig boekjaar).
+  const wisselEindKand = huurderId
+    ? alle.find(
+        (r) => r.aanleiding === "huurderwissel" && r.huurder_id === huurderId,
+      )
+    : undefined;
+  const wisselBeginKand = vorigeHuurderId
+    ? alle.find(
+        (r) =>
+          r.aanleiding === "huurderwissel" && r.huurder_id === vorigeHuurderId,
+      )
+    : undefined;
+  const wisselEind =
+    wisselEindKand && wisselEindKand.datum > basis.voor.datum
+      ? wisselEindKand
+      : undefined;
+  const wisselBegin =
+    wisselBeginKand && wisselBeginKand.datum >= basis.voor.datum
+      ? wisselBeginKand
+      : undefined;
+
+  let voor = wisselBegin ?? basis.voor;
+  let na = wisselEind ?? basis.na;
+
+  // Geen bruikbare eindstand voor deze periode? Val terug op de laatste
   // (tussentijdse) meting zodat het verbruik toch voorlopig zichtbaar is.
   if (voor === na) {
     const fb = kies(alle);
-    if (fb.voor !== fb.na) {
-      voor = fb.voor;
-      na = fb.na;
-      voorlopig = true;
+    const v2 = wisselBegin ?? fb.voor;
+    const n2 = wisselEind ?? fb.na;
+    if (v2 !== n2) {
+      voor = v2;
+      na = n2;
     }
   }
+  const voorlopig = na.aanleiding === "tussentijds";
 
   if (voor === na)
     return {
@@ -215,6 +250,7 @@ async function berekenVoorHuurder(
   },
   unitNaam: string,
   afrekeningVerzonden: boolean,
+  vorigeHuurderId: string | null,
 ): Promise<HuurderAfrekeningResultaat> {
   const bj = ctx.boekjaar;
   const periodeStart = maxDate(bj.start_datum, huurder.ingang_datum ?? bj.start_datum);
@@ -226,6 +262,10 @@ async function berekenVoorHuurder(
     huurder.uitgang_datum != null &&
     huurder.uitgang_datum >= bj.start_datum &&
     huurder.uitgang_datum <= bj.eind_datum;
+  const aangekomenInBoekjaar =
+    huurder.ingang_datum != null &&
+    huurder.ingang_datum >= bj.start_datum &&
+    huurder.ingang_datum <= bj.eind_datum;
 
   const base: HuurderAfrekeningResultaat = {
     huurder_id: huurder.id,
@@ -255,10 +295,21 @@ async function berekenVoorHuurder(
 
   const waarschuwingen: string[] = [];
 
+  const md = (t: TellerType) =>
+    meterDelta(
+      db,
+      huurder.unit_id,
+      t,
+      periodeStart,
+      periodeEind,
+      // Wissel-stand op naam alleen als de wissel in dit boekjaar viel.
+      vertrokkenInBoekjaar ? huurder.id : null,
+      aangekomenInBoekjaar ? vorigeHuurderId : null,
+    );
   const [koud, warm, cv] = await Promise.all([
-    meterDelta(db, huurder.unit_id, "koud_water", periodeStart, periodeEind),
-    meterDelta(db, huurder.unit_id, "warm_water", periodeStart, periodeEind),
-    meterDelta(db, huurder.unit_id, "cv", periodeStart, periodeEind),
+    md("koud_water"),
+    md("warm_water"),
+    md("cv"),
   ]);
   for (const w of [koud.waarschuwing, warm.waarschuwing, cv.waarschuwing])
     if (w) waarschuwingen.push(w);
@@ -441,13 +492,41 @@ export async function berekenHuurderAfrekeningen(
       .map((a) => a.huurder_id as string),
   );
 
-  const relevant = (huurders ?? []).filter(
-    (h: { ingang_datum: string | null; uitgang_datum: string | null }) => {
-      const s = h.ingang_datum ?? "0000-01-01";
-      const e = h.uitgang_datum ?? "9999-12-31";
-      return s <= bjRow.eind_datum && e >= bjRow.start_datum;
-    },
-  );
+  type HuurderRij = {
+    id: string;
+    unit_id: string;
+    naam: string;
+    voornaam: string | null;
+    email: string | null;
+    iban: string | null;
+    ingang_datum: string | null;
+    uitgang_datum: string | null;
+  };
+  const alleHuurders = (huurders ?? []) as HuurderRij[];
+  const relevant = alleHuurders.filter((h) => {
+    const s = h.ingang_datum ?? "0000-01-01";
+    const e = h.uitgang_datum ?? "9999-12-31";
+    return s <= bjRow.eind_datum && e >= bjRow.start_datum;
+  });
+
+  // Voorganger per huurder: de huurder in dezelfde unit die er vlak vóór woonde.
+  // Zijn huurderwissel-meterstand is de beginstand van deze huurder.
+  const vorigeHuurder = new Map<string, string | null>();
+  for (const h of relevant) {
+    const ingang = h.ingang_datum ?? "0000-01-01";
+    const kandidaten = alleHuurders
+      .filter(
+        (x) =>
+          x.unit_id === h.unit_id &&
+          x.id !== h.id &&
+          x.uitgang_datum != null &&
+          x.uitgang_datum <= ingang,
+      )
+      .sort((a, b) =>
+        (b.uitgang_datum ?? "").localeCompare(a.uitgang_datum ?? ""),
+      );
+    vorigeHuurder.set(h.id, kandidaten[0]?.id ?? null);
+  }
 
   // Bezetting per dag: hoeveel appartementen zijn bewoond (regel 3 — leegstand
   // wordt verdeeld over de aanwezige huurders).
@@ -457,11 +536,7 @@ export async function berekenHuurderAfrekeningen(
     Math.round((Date.parse(`${d}T00:00:00Z`) - bjStartMs) / 86_400_000);
 
   const unitBezet = new Map<string, Uint8Array>();
-  for (const h of relevant as {
-    unit_id: string;
-    ingang_datum: string | null;
-    uitgang_datum: string | null;
-  }[]) {
+  for (const h of relevant) {
     const s = maxDate(bjRow.start_datum, h.ingang_datum ?? bjRow.start_datum);
     const e = minDate(bjRow.eind_datum, h.uitgang_datum ?? bjRow.eind_datum);
     if (e < s) continue;
@@ -497,6 +572,7 @@ export async function berekenHuurderAfrekeningen(
         h,
         unitNaam.get(h.unit_id) ?? "—",
         verzonden.has(h.id),
+        vorigeHuurder.get(h.id) ?? null,
       ),
     );
   }
