@@ -191,6 +191,7 @@ export interface Document {
   id: string;
   vme_id: string;
   boekjaar_id: string | null;
+  transactie_id: string | null;
   naam: string;
   pad: string;
   mimetype: string | null;

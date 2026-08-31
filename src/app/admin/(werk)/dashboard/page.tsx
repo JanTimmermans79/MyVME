@@ -54,10 +54,12 @@ function PostLijst({
   posten,
   totaal,
   totaalLabel,
+  href,
 }: {
   posten: { label: string; bedrag: number }[];
   totaal: number;
   totaalLabel: string;
+  href?: string;
 }) {
   return (
     <div className="space-y-1.5 text-sm">
@@ -72,7 +74,13 @@ function PostLijst({
         ))
       )}
       <div className="flex justify-between gap-4 border-t pt-1.5 font-medium">
-        <span>{totaalLabel}</span>
+        {href ? (
+          <Link href={href} className="underline-offset-2 hover:underline">
+            {totaalLabel} →
+          </Link>
+        ) : (
+          <span>{totaalLabel}</span>
+        )}
         <span className="tabular-nums">{euro(totaal)}</span>
       </div>
     </div>
@@ -83,10 +91,12 @@ function RekeningKaart({
   titel,
   omschrijving,
   cf,
+  rekening,
 }: {
   titel: string;
   omschrijving: string;
   cf: RekeningCashflow;
+  rekening: "zicht" | "spaar";
 }) {
   const saldoBekend = cf.saldoEind != null;
   return (
@@ -102,11 +112,13 @@ function RekeningKaart({
           posten={cf.inkomsten}
           totaal={cf.totaalIn}
           totaalLabel="Totaal inkomsten"
+          href={`/admin/dashboard/${rekening}-in`}
         />
         <PostLijst
           posten={cf.uitgaven}
           totaal={cf.totaalUit}
           totaalLabel="Totaal uitgaven"
+          href={`/admin/dashboard/${rekening}-uit`}
         />
         <div className="rounded-lg bg-muted/50 p-3 text-sm">
           {!cf.geuploadet ? (
@@ -176,6 +188,7 @@ export default async function DashboardPage() {
           sub="reservefonds + kapitaalopvragingen"
           icon={TrendingUp}
           color="emerald"
+          href="/admin/dashboard/spaar-in"
         />
         <StatCard
           label="Uitgaven (spaarrekening)"
@@ -183,6 +196,7 @@ export default async function DashboardPage() {
           sub="kosten + overboekingen"
           icon={TrendingDown}
           color="rose"
+          href="/admin/dashboard/spaar-uit"
         />
         <StatCard
           label="Bank saldo"
@@ -284,11 +298,13 @@ export default async function DashboardPage() {
           titel="VME zichtrekening"
           omschrijving="Werkrekening: voorschotten bewoners in, exploitatiekosten uit."
           cf={overzicht.zicht}
+          rekening="zicht"
         />
         <RekeningKaart
           titel="VME spaarrekening"
           omschrijving="Reservefonds: provisies en kapitaalopvragingen in; kosten en overboekingen naar de werkrekening uit."
           cf={overzicht.spaar}
+          rekening="spaar"
         />
       </div>
 

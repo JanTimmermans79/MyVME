@@ -506,3 +506,20 @@ create policy categorie_select_eigenaar on public.categorie
 
 comment on table public.categorie is
   'Beheerbare kosten-/opbrengstcategorieën per VME. kosten.categorie blijft de tekstwaarde; deze tabel stuurt de keuzelijst en de groep (verbruik/divers/eigenaar).';
+
+-- =============================================================================
+-- Fase 3C: document.transactie_id
+-- =============================================================================
+-- =============================================================================
+-- Fase 3C: een document kan aan een banktransactie gekoppeld worden (spec §20).
+-- =============================================================================
+
+alter table public.document
+  add column if not exists transactie_id uuid
+  references public.transactie(id) on delete set null;
+
+create index if not exists document_transactie_idx
+  on public.document (transactie_id);
+
+comment on column public.document.transactie_id is
+  'Optionele koppeling aan een banktransactie (factuur bij betaling).';

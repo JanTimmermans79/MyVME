@@ -1,3 +1,6 @@
+"use client";
+
+import { useRouter } from "next/navigation";
 import { euro, datum as fmtDatum } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { VmeRekening } from "@/lib/types";
@@ -19,7 +22,9 @@ export interface FinancieleRij {
   categorie: string | null;
   rekening: VmeRekening | null;
   bedrag: number;
-  /** Extra cel-inhoud rechts (acties). */
+  /** Detailpagina — maakt de rij klikbaar (spec §6). */
+  href?: string;
+  /** Extra cel-inhoud rechts (acties). Klikken hierop navigeert niet. */
   acties?: React.ReactNode;
 }
 
@@ -39,12 +44,14 @@ export function FinancieleTabel({
   toonRekening?: boolean;
   legeTekst?: string;
 }) {
+  const router = useRouter();
+
   if (rijen.length === 0)
     return <p className="text-sm text-muted-foreground">{legeTekst}</p>;
 
   const totaal = rijen.reduce((s, r) => s + r.bedrag, 0);
   const heeftActies = rijen.some((r) => r.acties);
-  const spanTot = (toonRekening ? 4 : 3) + (heeftActies ? 1 : 0);
+  const spanTot = 3 + (toonRekening ? 1 : 0) + (heeftActies ? 1 : 0);
 
   return (
     <div className="overflow-x-auto">
@@ -62,7 +69,11 @@ export function FinancieleTabel({
         </TableHeader>
         <TableBody>
           {rijen.map((r) => (
-            <TableRow key={r.id}>
+            <TableRow
+              key={r.id}
+              className={cn(r.href && "cursor-pointer hover:bg-muted/50")}
+              onClick={r.href ? () => router.push(r.href!) : undefined}
+            >
               <TableCell className="whitespace-nowrap">
                 {fmtDatum(r.datum)}
               </TableCell>
@@ -91,7 +102,12 @@ export function FinancieleTabel({
                 {euro(r.bedrag)}
               </TableCell>
               {heeftActies && (
-                <TableCell className="text-right">{r.acties}</TableCell>
+                <TableCell
+                  className="text-right"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {r.acties}
+                </TableCell>
               )}
             </TableRow>
           ))}

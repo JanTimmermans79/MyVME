@@ -29,6 +29,7 @@ export function kostenNaarRijen(
     categorie: k.categorie,
     rekening: rekeningVanKost(k),
     bedrag: -Math.abs(Number(k.bedrag)), // een kost toont als uitgave
+    href: `/admin/financien/kost/${k.id}`,
     acties: acties?.(k),
   }));
 }
@@ -66,6 +67,7 @@ export function opbrengstenNaarRijen(
       categorie: t.betaler_type ?? null,
       rekening: t.rekening,
       bedrag: Number(t.bedrag),
+      href: `/admin/financien/transactie/${t.id}`,
     }))
     .sort((a, b) => b.datum.localeCompare(a.datum));
 }
