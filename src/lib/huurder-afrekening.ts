@@ -46,6 +46,12 @@ export interface HuurderAfrekeningResultaat {
   dagen: number;
   boekjaar_dagen: number;
   actief: boolean;
+  /** Huurcontract is in de loop van dit boekjaar geëindigd. */
+  vertrokken_in_boekjaar: boolean;
+  /** De afrekening van deze huurder is verstuurd. */
+  afrekening_verzonden: boolean;
+  /** Vertrokken én afrekening verstuurd → niet meer op te volgen. */
+  afgehandeld: boolean;
   lijnen: AfrekeningLijnInput[];
   totaal_kosten: number;
   voorschot_verwacht: number;
@@ -182,6 +188,7 @@ async function berekenVoorHuurder(
     uitgang_datum: string | null;
   },
   unitNaam: string,
+  afrekeningVerzonden: boolean,
 ): Promise<HuurderAfrekeningResultaat> {
   const bj = ctx.boekjaar;
   const periodeStart = maxDate(bj.start_datum, huurder.ingang_datum ?? bj.start_datum);
@@ -189,6 +196,10 @@ async function berekenVoorHuurder(
   const dagen = dagenInclusief(periodeStart, periodeEind);
   const boekjaarDagen = dagenInclusief(bj.start_datum, bj.eind_datum);
   const naam = [huurder.voornaam, huurder.naam].filter(Boolean).join(" ");
+  const vertrokkenInBoekjaar =
+    huurder.uitgang_datum != null &&
+    huurder.uitgang_datum >= bj.start_datum &&
+    huurder.uitgang_datum <= bj.eind_datum;
 
   const base: HuurderAfrekeningResultaat = {
     huurder_id: huurder.id,
@@ -201,6 +212,9 @@ async function berekenVoorHuurder(
     dagen,
     boekjaar_dagen: boekjaarDagen,
     actief: dagen > 0,
+    vertrokken_in_boekjaar: vertrokkenInBoekjaar,
+    afrekening_verzonden: afrekeningVerzonden,
+    afgehandeld: vertrokkenInBoekjaar && afrekeningVerzonden,
     lijnen: [],
     totaal_kosten: 0,
     voorschot_verwacht: 0,
@@ -377,10 +391,29 @@ export async function berekenHuurderAfrekeningen(
   const unitNaam = new Map(unitList.map((u) => [u.id, u.naam]));
   if (unitIds.length === 0) return [];
 
-  const { data: huurders } = await db
-    .from("huurder")
-    .select("id, unit_id, naam, voornaam, email, iban, ingang_datum, uitgang_datum")
-    .in("unit_id", unitIds);
+  const [{ data: huurders }, { data: afrekeningen }] = await Promise.all([
+    db
+      .from("huurder")
+      .select(
+        "id, unit_id, naam, voornaam, email, iban, ingang_datum, uitgang_datum",
+      )
+      .in("unit_id", unitIds),
+    db
+      .from("afrekening")
+      .select("huurder_id, mail_verzonden_op")
+      .eq("boekjaar_id", boekjaarId)
+      .eq("betaler_type", "huurder"),
+  ]);
+  const verzonden = new Set(
+    (
+      (afrekeningen ?? []) as {
+        huurder_id: string | null;
+        mail_verzonden_op: string | null;
+      }[]
+    )
+      .filter((a) => a.huurder_id && a.mail_verzonden_op)
+      .map((a) => a.huurder_id as string),
+  );
 
   const relevant = (huurders ?? []).filter(
     (h: { ingang_datum: string | null; uitgang_datum: string | null }) => {
@@ -432,7 +465,13 @@ export async function berekenHuurderAfrekeningen(
   const out: HuurderAfrekeningResultaat[] = [];
   for (const h of relevant) {
     out.push(
-      await berekenVoorHuurder(db, ctx, h, unitNaam.get(h.unit_id) ?? "—"),
+      await berekenVoorHuurder(
+        db,
+        ctx,
+        h,
+        unitNaam.get(h.unit_id) ?? "—",
+        verzonden.has(h.id),
+      ),
     );
   }
   return out;

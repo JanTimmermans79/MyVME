@@ -107,11 +107,17 @@ export default async function AfrekeningenPage() {
       if (a.betaler_type === "huurder" && a.huurder_id)
         opgeslagenHuurder.set(a.huurder_id, a);
 
-    // Live berekening voor het overzicht (altijd actueel).
+    // Live berekening voor het overzicht (altijd actueel). Afgehandelde huurders
+    // (vertrokken + afrekening verstuurd) onderaan.
     const adminDb = createAdminClient();
-    huurderResultaten = (
-      await berekenHuurderAfrekeningen(adminDb, boekjaar.id)
-    ).filter((h) => h.actief);
+    huurderResultaten = (await berekenHuurderAfrekeningen(adminDb, boekjaar.id))
+      .filter((h) => h.actief)
+      .sort(
+        (a, b) =>
+          Number(a.afgehandeld) - Number(b.afgehandeld) ||
+          a.unit_naam.localeCompare(b.unit_naam) ||
+          a.periode_start.localeCompare(b.periode_start),
+      );
   }
 
   return (
@@ -152,10 +158,19 @@ export default async function AfrekeningenPage() {
         <>
           <Card>
             <CardHeader>
-              <CardTitle>Huurders ({huurderResultaten.length})</CardTitle>
+              <CardTitle>
+                Huurders ({huurderResultaten.length}
+                {(() => {
+                  const n = huurderResultaten.filter((h) => h.afgehandeld).length;
+                  return n > 0 ? ` · ${n} afgehandeld` : "";
+                })()}
+                )
+              </CardTitle>
               <CardDescription>
                 Live berekend. Klik op een huurder voor het detail. Bewaren +
-                mailen doe je via “(her)berekenen”.
+                mailen doe je via “(her)berekenen”. Vertrokken huurders met een
+                verstuurde afrekening staan onderaan als{" "}
+                <em>afgehandeld</em>.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -191,12 +206,25 @@ export default async function AfrekeningenPage() {
                           .reduce((s, l) => s + l.bedrag, 0);
                         const href = `/admin/afrekeningen/huurder/${h.huurder_id}?boekjaar=${boekjaar.id}`;
                         return (
-                          <TableRow key={h.huurder_id}>
+                          <TableRow
+                            key={h.huurder_id}
+                            className={h.afgehandeld ? "opacity-55" : undefined}
+                          >
                             <TableCell>{h.unit_naam}</TableCell>
                             <TableCell className="font-medium">
                               <Link href={href} className="hover:underline">
                                 {h.huurder_naam}
                               </Link>
+                              {h.afgehandeld && (
+                                <Badge variant="outline" className="ml-2">
+                                  afgehandeld
+                                </Badge>
+                              )}
+                              {!h.afgehandeld && h.vertrokken_in_boekjaar && (
+                                <Badge variant="secondary" className="ml-2">
+                                  vertrokken
+                                </Badge>
+                              )}
                               {h.waarschuwingen.length > 0 && (
                                 <Badge
                                   variant="destructive"

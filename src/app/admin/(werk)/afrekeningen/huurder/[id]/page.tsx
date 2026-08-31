@@ -83,11 +83,20 @@ export default async function HuurderAfrekeningDetail({
 
       <Card>
         <CardHeader>
-          <CardTitle>
+          <CardTitle className="flex flex-wrap items-center gap-2">
             Afrekening — {h.huurder_naam} ({h.unit_naam})
+            {h.afgehandeld ? (
+              <Badge variant="outline">afgehandeld</Badge>
+            ) : (
+              h.vertrokken_in_boekjaar && (
+                <Badge variant="secondary">vertrokken in dit boekjaar</Badge>
+              )
+            )}
           </CardTitle>
           <CardDescription>
             Periode {periode} · {h.dagen} van {h.boekjaar_dagen} dagen
+            {h.afgehandeld &&
+              " · huurder vertrokken en afrekening verstuurd — niet meer actief"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

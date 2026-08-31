@@ -162,7 +162,13 @@ export default async function DashboardPage() {
 
   const bewoners = controle.filter((c) => c.soort === "bewoner");
   const afwijkingen = bewoners.filter((c) => Math.abs(c.afwijking) > 1);
-  const actieveHuurders = huurders.filter((h) => h.actief);
+  const actieveHuurders = huurders
+    .filter((h) => h.actief)
+    .sort(
+      (a, b) =>
+        Number(a.afgehandeld) - Number(b.afgehandeld) ||
+        a.unit_naam.localeCompare(b.unit_naam),
+    );
   const totaalHuurderkosten = actieveHuurders.reduce(
     (s, h) => s + h.totaal_kosten,
     0,
@@ -424,8 +430,18 @@ export default async function DashboardPage() {
                 </TableHeader>
                 <TableBody>
                   {actieveHuurders.map((h) => (
-                    <TableRow key={h.huurder_id}>
-                      <TableCell>{h.huurder_naam}</TableCell>
+                    <TableRow
+                      key={h.huurder_id}
+                      className={h.afgehandeld ? "opacity-55" : undefined}
+                    >
+                      <TableCell>
+                        {h.huurder_naam}
+                        {h.afgehandeld && (
+                          <Badge variant="outline" className="ml-2">
+                            afgehandeld
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell>{h.unit_naam}</TableCell>
                       <TableCell className="text-right tabular-nums">
                         {euro(h.totaal_kosten)}
