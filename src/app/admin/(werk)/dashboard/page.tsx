@@ -212,10 +212,10 @@ export default async function DashboardPage() {
         <StatCard
           label="Contacten"
           value={overzicht.aantalEigenaars + overzicht.aantalHuurders}
-          sub={`${overzicht.aantalEigenaars} eigenaars, ${overzicht.aantalHuurders} huurders`}
+          sub={`${overzicht.aantalEigenaars} eigenaars, ${overzicht.aantalHuurders} huurders dit boekjaar`}
           icon={Users}
           color="violet"
-          href="/admin/eigenaars"
+          href="/admin/dashboard/contacten"
         />
       </div>
 
@@ -241,7 +241,7 @@ export default async function DashboardPage() {
               hint: "Eigenaars en huurders",
               icon: Users,
               color: "violet",
-              href: "/admin/eigenaars",
+              href: "/admin/dashboard/contacten",
             },
             {
               label: "Voorschotten",

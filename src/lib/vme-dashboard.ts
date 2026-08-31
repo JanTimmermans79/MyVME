@@ -199,7 +199,7 @@ export async function vmeBoekjaarOverzicht(
   ]);
 
   const unitIds = ((unitRows ?? []) as { id: string }[]).map((u) => u.id);
-  const [{ count: aantalEigenaars }, { count: aantalHuurders }] = unitIds.length
+  const [{ count: aantalEigenaars }, { data: huurderRows }] = unitIds.length
     ? await Promise.all([
         db
           .from("eigenaar")
@@ -207,10 +207,22 @@ export async function vmeBoekjaarOverzicht(
           .in("unit_id", unitIds),
         db
           .from("huurder")
-          .select("id", { count: "exact", head: true })
+          .select("ingang_datum, uitgang_datum")
           .in("unit_id", unitIds),
       ])
-    : [{ count: 0 }, { count: 0 }];
+    : [{ count: 0 }, { data: [] as { ingang_datum: string | null; uitgang_datum: string | null }[] }];
+
+  // Enkel huurders met een huurperiode die in dit boekjaar valt.
+  const aantalHuurders = (
+    (huurderRows ?? []) as {
+      ingang_datum: string | null;
+      uitgang_datum: string | null;
+    }[]
+  ).filter((h) => {
+    const s = h.ingang_datum ?? "0000-01-01";
+    const e = h.uitgang_datum ?? "9999-12-31";
+    return s <= boekjaar.eind_datum && e >= boekjaar.start_datum;
+  }).length;
 
   const us = (uittreksels ?? []) as {
     rekening: VmeRekening;
