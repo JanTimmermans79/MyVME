@@ -144,10 +144,19 @@ async function meterDelta(
 
   const { data: standen } = await db
     .from("meterstand")
-    .select("datum, waarde")
+    .select("datum, waarde, aanleiding")
     .eq("teller_id", teller.id)
     .order("datum", { ascending: true });
-  const rows = (standen ?? []) as { datum: string; waarde: number }[];
+  const alle = (standen ?? []) as {
+    datum: string;
+    waarde: number;
+    aanleiding: string | null;
+  }[];
+  // Jaarafrekening rekent met afrekeningswaarden (boekjaareinde / huurderwissel),
+  // niet met tussentijdse controlestanden. Enkel terugvallen op tussentijds als
+  // er anders te weinig data is.
+  const grens = alle.filter((r) => r.aanleiding !== "tussentijds");
+  const rows = grens.length >= 2 ? grens : alle;
   if (rows.length < 2)
     return {
       delta: 0,

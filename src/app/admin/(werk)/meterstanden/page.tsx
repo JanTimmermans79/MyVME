@@ -4,6 +4,7 @@ import { getActiveContext } from "@/lib/vme-context";
 import { datum, euro } from "@/lib/format";
 import { tellerOverzicht } from "@/lib/verbruik";
 import { NoBoekjaar } from "@/components/no-boekjaar";
+import { TerugLink } from "@/components/terug-link";
 import { ActionForm } from "@/components/action-form";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import {
@@ -22,7 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Eenheidsprijs, Huurder, Meterstand, Teller, Unit } from "@/lib/types";
+import type { Eenheidsprijs, Huurder, Teller, Unit } from "@/lib/types";
 import { verwijderMeterstand } from "./actions";
 import {
   EenheidsprijsForm,
@@ -36,26 +37,32 @@ export const metadata = { title: "Meterstanden" };
 const m3 = (n: number) =>
   `${n.toLocaleString("nl-BE", { maximumFractionDigits: 1 })} m³`;
 
+const AANLEIDING_LABEL: Record<string, string> = {
+  boekjaareinde: "boekjaareinde",
+  huurderwissel: "huurderwissel",
+  tussentijds: "tussentijds",
+};
+
 export default async function TellersPage() {
   const { vme: active, boekjaar } = await getActiveContext();
   if (!active || !boekjaar) return <NoBoekjaar />;
-  const gekozenId = boekjaar.id;
 
   const supabase = await createClient();
 
-  const { data: prijs } = await supabase
-    .from("eenheidsprijs")
-    .select("*")
-    .eq("vme_id", active.id)
-    .eq("boekjaar_id", gekozenId)
-    .maybeSingle<Eenheidsprijs>();
-
-  const { data: units } = await supabase
-    .from("unit")
-    .select("*")
-    .eq("vme_id", active.id)
-    .order("naam")
-    .returns<Unit[]>();
+  const [{ data: prijs }, { data: units }] = await Promise.all([
+    supabase
+      .from("eenheidsprijs")
+      .select("*")
+      .eq("vme_id", active.id)
+      .eq("boekjaar_id", boekjaar.id)
+      .maybeSingle<Eenheidsprijs>(),
+    supabase
+      .from("unit")
+      .select("*")
+      .eq("vme_id", active.id)
+      .order("naam")
+      .returns<Unit[]>(),
+  ]);
   const unitIds = (units ?? []).map((u) => u.id);
 
   const [{ data: tellers }, { data: huurders }] = await Promise.all([
@@ -67,16 +74,6 @@ export default async function TellersPage() {
       : Promise.resolve({ data: [] as Huurder[] }),
   ]);
 
-  const tellerIds = (tellers ?? []).map((t) => t.id);
-  const { data: standen } = tellerIds.length
-    ? await supabase
-        .from("meterstand")
-        .select("*")
-        .in("teller_id", tellerIds)
-        .order("datum", { ascending: false })
-        .returns<Meterstand[]>()
-    : { data: [] as Meterstand[] };
-
   const overzicht = await tellerOverzicht(createAdminClient(), active.id, boekjaar);
 
   const tellersByUnit = new Map<string, Teller[]>();
@@ -85,29 +82,225 @@ export default async function TellersPage() {
     l.push(t);
     tellersByUnit.set(t.unit_id, l);
   }
-  const standenByTeller = new Map<string, Meterstand[]>();
-  for (const s of standen ?? []) {
-    const l = standenByTeller.get(s.teller_id) ?? [];
-    l.push(s);
-    standenByTeller.set(s.teller_id, l);
-  }
   const huurdersByUnit = new Map<string, Huurder[]>();
   for (const h of huurders ?? []) {
     const l = huurdersByUnit.get(h.unit_id) ?? [];
     l.push(h);
     huurdersByUnit.set(h.unit_id, l);
   }
+  const meternrByTeller = new Map((tellers ?? []).map((t) => [`${t.unit_id}|${t.type}`, t]));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      <TerugLink href="/admin/dashboard">Dashboard</TerugLink>
+
       <div>
         <h1 className="text-xl font-semibold">Meterstanden</h1>
         <p className="text-sm text-muted-foreground">
           Boekjaar {datum(boekjaar.start_datum)} – {datum(boekjaar.eind_datum)}.
-          Meterstanden geef je binnen dit boekjaar in; de beginstand komt
-          automatisch uit het vorige boekjaar.
+          De beginstand is de afrekeningswaarde van het vorige boekjaar. Voer per
+          appartement de eindstand in; tussentijdse standen (huurderwissel,
+          controle) tellen mee voor het overzicht, niet voor de jaarafrekening.
         </p>
       </div>
+
+      {(units ?? []).length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Maak eerst appartementen aan via Instellingen.
+        </p>
+      ) : (
+        overzicht.map((u) => {
+          const ut = tellersByUnit.get(u.unit_id) ?? [];
+          const heeftTellers = ut.length > 0;
+          return (
+            <Card key={u.unit_id}>
+              <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base">
+                    {u.unit_naam}
+                    {u.huurder && (
+                      <span className="ml-2 text-sm font-normal text-muted-foreground">
+                        {u.huurder}
+                      </span>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    Verbruikskost dit boekjaar:{" "}
+                    <strong className="tabular-nums text-foreground">
+                      {euro(u.totaalKost)}
+                    </strong>
+                  </CardDescription>
+                </div>
+                {heeftTellers ? (
+                  <NieuweMeterstandDialog
+                    unitId={u.unit_id}
+                    unitNaam={u.unit_naam}
+                    tellers={ut}
+                    huurders={huurdersByUnit.get(u.unit_id) ?? []}
+                    boekjaarStart={boekjaar.start_datum}
+                    boekjaarEind={boekjaar.eind_datum}
+                  />
+                ) : (
+                  <MaakTellersButton unitId={u.unit_id} />
+                )}
+              </CardHeader>
+
+              {heeftTellers && (
+                <CardContent className="space-y-3">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Teller</TableHead>
+                          <TableHead className="text-right">
+                            Begin (vorig boekjaar)
+                          </TableHead>
+                          <TableHead className="text-right">Eind</TableHead>
+                          <TableHead className="text-right">Verbruik</TableHead>
+                          <TableHead className="text-right">Kost</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {u.regels.map((r) => {
+                          const teller = meternrByTeller.get(`${u.unit_id}|${r.type}`);
+                          return (
+                            <TableRow key={r.type}>
+                              <TableCell>
+                                {r.label}
+                                {teller?.meternummer && (
+                                  <span className="ml-2 text-xs text-muted-foreground">
+                                    nr. {teller.meternummer}
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right text-xs tabular-nums">
+                                {r.beginWaarde != null
+                                  ? `${r.beginWaarde} m³`
+                                  : "—"}
+                                {r.beginDatum && (
+                                  <span className="block text-muted-foreground">
+                                    {datum(r.beginDatum)}
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right text-xs tabular-nums">
+                                {r.eindWaarde != null ? `${r.eindWaarde} m³` : "—"}
+                                {r.eindDatum && (
+                                  <span className="block text-muted-foreground">
+                                    {datum(r.eindDatum)}
+                                    {r.eindAanleiding === "tussentijds" && (
+                                      <Badge
+                                        variant="outline"
+                                        className="ml-1 px-1 py-0 text-[10px]"
+                                      >
+                                        voorlopig
+                                      </Badge>
+                                    )}
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {m3(r.delta)}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {euro(r.kost)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Standen van dit boekjaar */}
+                  {u.regels.some((r) => r.standenDitBoekjaar.length > 0) && (
+                    <div className="rounded-md bg-muted/40 p-2 text-xs">
+                      <span className="font-medium text-muted-foreground">
+                        Standen dit boekjaar
+                      </span>
+                      <ul className="mt-1 space-y-0.5">
+                        {u.regels.flatMap((r) =>
+                          r.standenDitBoekjaar.map((s) => (
+                            <li
+                              key={s.id}
+                              className="flex items-center gap-2 tabular-nums"
+                            >
+                              <span className="w-24 text-muted-foreground">
+                                {r.label}
+                              </span>
+                              <span className="w-20">{datum(s.datum)}</span>
+                              <span className="w-16">{s.waarde} m³</span>
+                              <Badge
+                                variant="secondary"
+                                className="px-1 py-0 text-[10px]"
+                              >
+                                {AANLEIDING_LABEL[s.aanleiding] ?? s.aanleiding}
+                              </Badge>
+                              <ActionForm
+                                action={verwijderMeterstand}
+                                hiddenFields={{ id: s.id }}
+                              >
+                                <ConfirmSubmit
+                                  size="sm"
+                                  variant="ghost"
+                                  message="Meterstand verwijderen?"
+                                >
+                                  ✕
+                                </ConfirmSubmit>
+                              </ActionForm>
+                            </li>
+                          )),
+                        )}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Meternummers (compact) */}
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-muted-foreground">
+                      Meternummers bewerken
+                    </summary>
+                    <div className="mt-2 space-y-1.5">
+                      {ut
+                        .slice()
+                        .sort((a, b) => a.type.localeCompare(b.type))
+                        .map((t) => (
+                          <MeternummerRij key={t.id} teller={t} />
+                        ))}
+                    </div>
+                  </details>
+
+                  {/* Tussentijdse controle: verbruik op schema? */}
+                  {u.geraamdeJaarkost != null && u.voorschotJaar > 0 && (
+                    <p className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">
+                        Geraamd jaarverbruik (o.b.v. {datum(u.laatsteMeting)}):
+                      </span>
+                      <strong className="tabular-nums">
+                        {euro(u.geraamdeJaarkost)}
+                      </strong>
+                      <span className="text-muted-foreground">
+                        · jaarvoorschot {euro(u.voorschotJaar)}
+                      </span>
+                      <Badge
+                        variant={
+                          u.geraamdeJaarkost > u.voorschotJaar
+                            ? "destructive"
+                            : "secondary"
+                        }
+                      >
+                        {u.geraamdeJaarkost > u.voorschotJaar
+                          ? "verbruik boven voorschot"
+                          : "op schema"}
+                      </Badge>
+                    </p>
+                  )}
+                </CardContent>
+              )}
+            </Card>
+          );
+        })
+      )}
 
       <Card>
         <CardHeader>
@@ -117,186 +310,12 @@ export default async function TellersPage() {
             (Δ CV × liter/m³ + Δ warm water × liter/m³) × mazoutprijs.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent>
           <EenheidsprijsForm
             vmeId={active.id}
-            boekjaarId={gekozenId}
+            boekjaarId={boekjaar.id}
             huidig={prijs ?? null}
           />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Verbruik &amp; tussentijdse controle</CardTitle>
-          <CardDescription>
-            Begin → eind → verbruik per teller voor dit boekjaar. Bij een
-            tussentijdse stand wordt het jaarverbruik geëxtrapoleerd en vergeleken
-            met het jaarvoorschot van de huurder (individueel verbruik; het
-            voorschot dekt ook de gedeelde kosten).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {overzicht.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Maak eerst units aan.</p>
-          ) : (
-            overzicht.map((u) => (
-              <div key={u.unit_id} className="rounded-lg border p-3">
-                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-medium">
-                    {u.unit_naam}
-                    {u.huurder && (
-                      <span className="ml-2 text-sm text-muted-foreground">
-                        {u.huurder}
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-sm">
-                    Verbruikskost:{" "}
-                    <strong className="tabular-nums">{euro(u.totaalKost)}</strong>
-                  </span>
-                </div>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Teller</TableHead>
-                        <TableHead className="text-right">Begin</TableHead>
-                        <TableHead className="text-right">Eind</TableHead>
-                        <TableHead className="text-right">Verbruik</TableHead>
-                        <TableHead className="text-right">Kost</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {u.regels.map((r) => (
-                        <TableRow key={r.type}>
-                          <TableCell>{r.label}</TableCell>
-                          <TableCell className="text-right text-xs tabular-nums">
-                            {r.beginWaarde != null
-                              ? `${r.beginWaarde} (${datum(r.beginDatum)})`
-                              : "—"}
-                          </TableCell>
-                          <TableCell className="text-right text-xs tabular-nums">
-                            {r.eindWaarde != null
-                              ? `${r.eindWaarde} (${datum(r.eindDatum)})`
-                              : "—"}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {m3(r.delta)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {euro(r.kost)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-                {u.geraamdeJaarkost != null && u.voorschotJaar > 0 && (
-                  <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">
-                      Geraamd jaarverbruik (o.b.v. meting {datum(u.laatsteMeting)}):
-                    </span>
-                    <strong className="tabular-nums">
-                      {euro(u.geraamdeJaarkost)}
-                    </strong>
-                    <span className="text-muted-foreground">
-                      · jaarvoorschot {euro(u.voorschotJaar)}
-                    </span>
-                    <Badge
-                      variant={
-                        u.geraamdeJaarkost > u.voorschotJaar
-                          ? "destructive"
-                          : "secondary"
-                      }
-                    >
-                      {u.geraamdeJaarkost > u.voorschotJaar
-                        ? "verbruik hoger dan voorschot"
-                        : "voorschot dekt verbruik"}
-                    </Badge>
-                  </p>
-                )}
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Meterstanden invoeren</CardTitle>
-          <CardDescription>
-            Meternummers en het invoeren van standen (eindstand, huurderwissel of
-            tussentijds). Alleen data binnen het gekozen boekjaar.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!units || units.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Maak eerst units aan.</p>
-          ) : (
-            units.map((u) => {
-              const ut = tellersByUnit.get(u.id) ?? [];
-              return (
-                <div key={u.id} className="rounded-lg border p-3">
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium">{u.naam}</span>
-                    {ut.length === 0 ? (
-                      <MaakTellersButton unitId={u.id} />
-                    ) : (
-                      <NieuweMeterstandDialog
-                        unitId={u.id}
-                        unitNaam={u.naam}
-                        tellers={ut}
-                        huurders={huurdersByUnit.get(u.id) ?? []}
-                        boekjaarStart={boekjaar.start_datum}
-                        boekjaarEind={boekjaar.eind_datum}
-                      />
-                    )}
-                  </div>
-                  {ut.length > 0 && (
-                    <div className="space-y-3">
-                      {ut
-                        .slice()
-                        .sort((a, b) => a.type.localeCompare(b.type))
-                        .map((t) => {
-                          const st = standenByTeller.get(t.id) ?? [];
-                          return (
-                            <div key={t.id}>
-                              <MeternummerRij teller={t} />
-                              {st.length > 0 && (
-                                <ul className="ml-32 mt-1 space-y-0.5 text-xs text-muted-foreground">
-                                  {st.slice(0, 5).map((s) => (
-                                    <li
-                                      key={s.id}
-                                      className="flex items-center gap-2"
-                                    >
-                                      {datum(s.datum)}: {Number(s.waarde)} m³ (
-                                      {s.aanleiding})
-                                      <ActionForm
-                                        action={verwijderMeterstand}
-                                        hiddenFields={{ id: s.id }}
-                                      >
-                                        <ConfirmSubmit
-                                          size="sm"
-                                          variant="ghost"
-                                          message="Meterstand verwijderen?"
-                                        >
-                                          ✕
-                                        </ConfirmSubmit>
-                                      </ActionForm>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
-                          );
-                        })}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
         </CardContent>
       </Card>
     </div>

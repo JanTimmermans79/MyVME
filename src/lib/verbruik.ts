@@ -131,9 +131,19 @@ export interface TellerRegel {
   beginDatum: string | null;
   eindWaarde: number | null;
   eindDatum: string | null;
+  /** Aanleiding van de eindstand — "tussentijds" = nog geen definitieve
+   *  boekjaar-/afrekeningswaarde. */
+  eindAanleiding: string | null;
   delta: number;
   kost: number;
-  tussentijds: { datum: string; waarde: number }[];
+  tussentijds: { id: string; datum: string; waarde: number; aanleiding: string }[];
+  /** Alle standen van deze teller binnen het boekjaar (voor de invoerlijst). */
+  standenDitBoekjaar: {
+    id: string;
+    datum: string;
+    waarde: number;
+    aanleiding: string;
+  }[];
 }
 
 export interface UnitTellerOverzicht {
@@ -187,14 +197,15 @@ export async function tellerOverzicht(
   }[];
   const tellerIds = tellers.map((t) => t.id);
 
+  type StandRij = Stand & { id: string; aanleiding: string };
   const { data: standRows } = tellerIds.length
     ? await db
         .from("meterstand")
-        .select("teller_id, datum, waarde, aanleiding")
+        .select("id, teller_id, datum, waarde, aanleiding")
         .in("teller_id", tellerIds)
-    : { data: [] as (Stand & { aanleiding: string })[] };
-  const standen = (standRows ?? []) as (Stand & { aanleiding: string })[];
-  const perTeller = new Map<string, (Stand & { aanleiding: string })[]>();
+    : { data: [] as StandRij[] };
+  const standen = (standRows ?? []) as StandRij[];
+  const perTeller = new Map<string, StandRij[]>();
   for (const s of standen) {
     const l = perTeller.get(s.teller_id) ?? [];
     l.push(s);
@@ -243,20 +254,31 @@ export async function tellerOverzicht(
     const regels: TellerRegel[] = (["koud_water", "warm_water", "cv"] as const).map(
       (type) => {
         const t = ut.find((x) => x.type === type);
-        const rows: (Stand & { aanleiding: string })[] = (
-          t ? (perTeller.get(t.id) ?? []) : []
-        )
+        const rows: StandRij[] = (t ? (perTeller.get(t.id) ?? []) : [])
           .slice()
           .sort((a, b) => a.datum.localeCompare(b.datum));
-        let begin: (Stand & { aanleiding: string }) | null = null;
-        let eind: (Stand & { aanleiding: string }) | null = null;
-        const tussentijds: { datum: string; waarde: number }[] = [];
+        let begin: StandRij | null = null;
+        let eind: StandRij | null = null;
+        const tussentijds: TellerRegel["tussentijds"] = [];
+        const standenDitBoekjaar: TellerRegel["standenDitBoekjaar"] = [];
         for (const r of rows) {
-          if (r.datum < boekjaar.start_datum) begin = r;
-          else if (r.datum <= boekjaar.eind_datum) {
+          if (r.datum < boekjaar.start_datum) {
+            begin = r;
+          } else if (r.datum <= boekjaar.eind_datum) {
             eind = r;
+            standenDitBoekjaar.push({
+              id: r.id,
+              datum: r.datum,
+              waarde: Number(r.waarde),
+              aanleiding: r.aanleiding,
+            });
             if (r.aanleiding === "tussentijds")
-              tussentijds.push({ datum: r.datum, waarde: Number(r.waarde) });
+              tussentijds.push({
+                id: r.id,
+                datum: r.datum,
+                waarde: Number(r.waarde),
+                aanleiding: r.aanleiding,
+              });
           }
         }
         const bW = begin ? Number(begin.waarde) : null;
@@ -281,9 +303,11 @@ export async function tellerOverzicht(
           beginDatum: begin?.datum ?? null,
           eindWaarde: eW,
           eindDatum: eind?.datum ?? null,
+          eindAanleiding: eind?.aanleiding ?? null,
           delta,
           kost,
           tussentijds,
+          standenDitBoekjaar,
         };
       },
     );
