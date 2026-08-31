@@ -318,3 +318,21 @@ export interface AfrekeningLijn {
   created_at: string;
 }
 
+export type ActiepuntStatus = "open" | "bezig" | "afgewerkt";
+export type ActiepuntBron = "handmatig" | "jaarverslag";
+
+export interface Actiepunt {
+  id: string;
+  vme_id: string;
+  boekjaar_id: string | null;
+  titel: string;
+  omschrijving: string | null;
+  status: ActiepuntStatus;
+  deadline: string | null;
+  verantwoordelijke: string | null;
+  bron: ActiepuntBron;
+  document_id: string | null;
+  created_at: string;
+  afgewerkt_op: string | null;
+}
+
