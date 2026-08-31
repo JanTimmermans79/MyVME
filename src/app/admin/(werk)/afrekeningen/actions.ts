@@ -90,7 +90,7 @@ export async function berekenEnBewaar(
     if (eig.kostenZonderSleutel > 0)
       msg += ` ${eig.kostenZonderSleutel.toFixed(2)} EUR eigenaarskosten zonder verdeelsleutel niet verdeeld.`;
     if (waarschuwingen.length)
-      msg += ` ${waarschuwingen.length} waarschuwing(en) — zie het overzicht.`;
+      msg += ` ${waarschuwingen.length} waarschuwing(en) — zie de lijst “Waarschuwingen” bovenaan de pagina.`;
     return { ok: true, message: msg };
   });
 }

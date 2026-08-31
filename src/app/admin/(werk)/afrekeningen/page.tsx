@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, AlertTriangle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveContext } from "@/lib/vme-context";
@@ -120,6 +120,16 @@ export default async function AfrekeningenPage() {
       );
   }
 
+  const alleWaarschuwingen = huurderResultaten.flatMap((h) =>
+    h.waarschuwingen.map((tekst) => ({
+      wie: `${h.huurder_naam} — ${h.unit_naam}`,
+      tekst,
+      href: `/admin/afrekeningen/huurder/${h.huurder_id}?boekjaar=${
+        boekjaar?.id ?? ""
+      }`,
+    })),
+  );
+
   return (
     <div className="space-y-6">
       <Link
@@ -153,6 +163,36 @@ export default async function AfrekeningenPage() {
           </div>
         </CardContent>
       </Card>
+
+      {alleWaarschuwingen.length > 0 && (
+        <Card className="border-amber-500/40">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertTriangle className="size-4 text-amber-600" />
+              Waarschuwingen ({alleWaarschuwingen.length})
+            </CardTitle>
+            <CardDescription>
+              Controleer deze punten vóór je de afrekeningen verstuurt. Klik op
+              een naam voor het detail van die huurder.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1.5 text-sm">
+              {alleWaarschuwingen.map((w, i) => (
+                <li key={i} className="flex flex-wrap items-baseline gap-x-2">
+                  <Link
+                    href={w.href}
+                    className="font-medium underline-offset-2 hover:underline"
+                  >
+                    {w.wie}
+                  </Link>
+                  <span className="text-muted-foreground">{w.tekst}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {boekjaar && (
         <>
