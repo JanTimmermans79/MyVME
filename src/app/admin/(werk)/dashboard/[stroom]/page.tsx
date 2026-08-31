@@ -72,13 +72,16 @@ export default async function DrilldownPage({
 
   const groepen: { naam: string; rijen: FinancieleRij[] }[] = [];
 
+  const duwIn = (m: Map<string, FinancieleRij[]>, k: string, r: FinancieleRij) => {
+    const l = m.get(k);
+    if (l) l.push(r);
+    else m.set(k, [r]);
+  };
+
   if (cfg.richting === "in") {
     const rijen = opbrengstenNaarRijen(tx, boekjaar, cfg.rekening);
     const per = new Map<string, FinancieleRij[]>();
-    for (const r of rijen) {
-      const naam = r.omschrijving.split(" — ")[0];
-      (per.get(naam) ?? per.set(naam, []).get(naam)!).push(r);
-    }
+    for (const r of rijen) duwIn(per, r.omschrijving.split(" — ")[0], r);
     for (const [naam, rs] of [...per].sort()) groepen.push({ naam, rijen: rs });
   } else {
     // Categorie van de gekoppelde kost erbij, voor een nettere groepering.
@@ -114,7 +117,7 @@ export default async function DrilldownPage({
         bedrag: Number(t.bedrag),
         href: `/admin/financien/transactie/${t.id}`,
       };
-      (per.get(naam) ?? per.set(naam, []).get(naam)!).push(rij);
+      duwIn(per, naam, rij);
     }
     for (const [naam, rs] of [...per].sort(([a], [b]) => a.localeCompare(b))) {
       rs.sort((x, y) => y.datum.localeCompare(x.datum));

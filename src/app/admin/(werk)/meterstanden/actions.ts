@@ -57,7 +57,9 @@ export async function nieuweMeterstanden(
     const unit_id = str(formData, "unit_id");
     const datum = str(formData, "datum");
     const aanleiding = str(formData, "aanleiding") || "tussentijds";
-    const huurder_id = optStr(formData, "huurder_id");
+    // Een huurder hangt enkel aan een huurderwissel-stand.
+    const huurder_id =
+      aanleiding === "huurderwissel" ? optStr(formData, "huurder_id") : null;
     if (!unit_id || !datum)
       return { ok: false, error: "Unit en datum zijn verplicht." };
 
@@ -165,6 +167,13 @@ export async function updateMeterstanden(
         };
     }
 
+    // huurder_id volgt de aanleiding: enkel een huurderwissel draagt een huurder.
+    const patchBasis = {
+      datum,
+      aanleiding,
+      huurder_id: aanleiding === "huurderwissel" ? huurder_id : null,
+    };
+
     let n = 0;
     for (const type of TYPES) {
       const id = str(formData, `id_${type}`);
@@ -176,7 +185,7 @@ export async function updateMeterstanden(
         return { ok: false, error: "Meterstanden mogen niet negatief zijn." };
       const { error } = await db
         .from("meterstand")
-        .update({ datum, waarde, aanleiding, huurder_id })
+        .update({ ...patchBasis, waarde })
         .eq("id", id);
       if (error) return { ok: false, error: error.message };
       n += 1;

@@ -44,6 +44,7 @@ export default async function AfrekeningenPage() {
   const opgeslagenHuurder = new Map<string, Afrekening>();
 
   if (boekjaar) {
+    const adminDb = createAdminClient();
     const { data: units } = await supabase
       .from("unit")
       .select("*")
@@ -52,7 +53,13 @@ export default async function AfrekeningenPage() {
     const unitIds = (units ?? []).map((u) => u.id);
     const unitNaam = new Map((units ?? []).map((u) => [u.id, u.naam]));
 
-    const [{ data: afrekeningen }, { data: eigenaars }] = await Promise.all([
+    // Onafhankelijke queries + de twee zware berekeningen parallel.
+    const [
+      { data: afrekeningen },
+      { data: eigenaars },
+      { regels: eigLive },
+      huurderRuw,
+    ] = await Promise.all([
       supabase
         .from("afrekening")
         .select("*")
@@ -65,17 +72,14 @@ export default async function AfrekeningenPage() {
             .in("unit_id", unitIds)
             .returns<Eigenaar[]>()
         : Promise.resolve({ data: [] as Eigenaar[] }),
+      berekenEigenaarAfrekeningen(adminDb, boekjaar.id),
+      berekenHuurderAfrekeningen(adminDb, boekjaar.id),
     ]);
 
     const eigenaarByUnit = new Map<string, Eigenaar>();
     for (const e of eigenaars ?? [])
       if (!eigenaarByUnit.has(e.unit_id)) eigenaarByUnit.set(e.unit_id, e);
 
-    // Reservefonds-/kapitaalcijfers uit de live berekening.
-    const { regels: eigLive } = await berekenEigenaarAfrekeningen(
-      createAdminClient(),
-      boekjaar.id,
-    );
     const liveByUnit = new Map(eigLive.map((r) => [r.unit_id, r]));
 
     eigenaarRijen = (afrekeningen ?? [])
@@ -107,10 +111,8 @@ export default async function AfrekeningenPage() {
       if (a.betaler_type === "huurder" && a.huurder_id)
         opgeslagenHuurder.set(a.huurder_id, a);
 
-    // Live berekening voor het overzicht (altijd actueel). Afgehandelde huurders
-    // (vertrokken + afrekening verstuurd) onderaan.
-    const adminDb = createAdminClient();
-    huurderResultaten = (await berekenHuurderAfrekeningen(adminDb, boekjaar.id))
+    // Afgehandelde huurders (vertrokken + afrekening verstuurd) onderaan.
+    huurderResultaten = huurderRuw
       .filter((h) => h.actief)
       .sort(
         (a, b) =>

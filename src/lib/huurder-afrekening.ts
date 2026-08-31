@@ -80,16 +80,10 @@ interface Ctx {
 
 async function laadContext(
   db: Db,
-  boekjaarId: string,
+  bj: Ctx["boekjaar"],
   deelfactorVoor: Ctx["deelfactorVoor"],
 ): Promise<Ctx> {
-  const { data: bj } = await db
-    .from("boekjaar")
-    .select("id, vme_id, start_datum, eind_datum")
-    .eq("id", boekjaarId)
-    .maybeSingle<Ctx["boekjaar"]>();
-  if (!bj) throw new Error("Boekjaar niet gevonden.");
-
+  const boekjaarId = bj.id;
   const { data: ep } = await db
     .from("eenheidsprijs")
     .select("*")
@@ -417,14 +411,16 @@ async function berekenVoorHuurder(
     bj,
   );
   const eigenIban = normIban(huurder.iban);
+  const inPeriode = (t: VsTx) =>
+    t.datum >= periodeStart && t.datum <= periodeEind;
   const ontvangen = round2(
     tx
       .filter((t) => {
-        if (eigenIban) {
-          const ti = normIban(t.tegenpartij_iban);
-          return !ti || ti === eigenIban;
-        }
-        return t.datum >= periodeStart && t.datum <= periodeEind;
+        const ti = normIban(t.tegenpartij_iban);
+        if (eigenIban && ti) return ti === eigenIban;
+        // Zonder (bekende) IBAN: op periode toewijzen, zodat een betaling niet
+        // bij twee co-huurders van hetzelfde appartement dubbel telt.
+        return inPeriode(t);
       })
       .reduce((s, t) => s + Number(t.bedrag), 0),
   );
@@ -452,12 +448,13 @@ export async function berekenHuurderAfrekeningen(
   db: Db,
   boekjaarId: string,
 ): Promise<HuurderAfrekeningResultaat[]> {
-  const { data: bjRow } = await db
+  const { data: bjData } = await db
     .from("boekjaar")
-    .select("vme_id, start_datum, eind_datum")
+    .select("id, vme_id, start_datum, eind_datum")
     .eq("id", boekjaarId)
-    .maybeSingle<{ vme_id: string; start_datum: string; eind_datum: string }>();
-  if (!bjRow) throw new Error("Boekjaar niet gevonden.");
+    .maybeSingle<Ctx["boekjaar"]>();
+  if (!bjData) throw new Error("Boekjaar niet gevonden.");
+  const bjRow = bjData;
 
   const { data: units } = await db
     .from("unit")
@@ -561,12 +558,11 @@ export async function berekenHuurderAfrekeningen(
     return f;
   };
 
-  const ctx = await laadContext(db, boekjaarId, deelfactorVoor);
+  const ctx = await laadContext(db, bjRow, deelfactorVoor);
 
-  const out: HuurderAfrekeningResultaat[] = [];
-  for (const h of relevant) {
-    out.push(
-      await berekenVoorHuurder(
+  return Promise.all(
+    relevant.map((h) =>
+      berekenVoorHuurder(
         db,
         ctx,
         h,
@@ -574,7 +570,6 @@ export async function berekenHuurderAfrekeningen(
         verzonden.has(h.id),
         vorigeHuurder.get(h.id) ?? null,
       ),
-    );
-  }
-  return out;
+    ),
+  );
 }

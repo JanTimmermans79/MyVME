@@ -22,8 +22,20 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { Eigenaar, Huurder, Transactie, Unit } from "@/lib/types";
-import { hoortBijBoekjaar } from "@/lib/boekjaar-transacties";
+import {
+  hoortBijBoekjaar,
+  boekjaarOrFilter,
+} from "@/lib/boekjaar-transacties";
 import { suggestie, type Kandidaat } from "@/lib/bank-matching";
+
+// Soorten die niet aan een unit gekoppeld hoeven te worden.
+const GEEN_MATCH_NODIG = [
+  "kost",
+  "interne_overboeking",
+  "rente",
+  "afrekening",
+  "kapitaalsoproep",
+];
 import { BankImporter } from "./bank-importer";
 import { AssignRow } from "./assign-row";
 import { SoortSelect } from "./soort-select";
@@ -49,21 +61,34 @@ export default async function BankPage() {
     .returns<Unit[]>();
   const unitIds = (units ?? []).map((u) => u.id);
 
-  const [{ data: eigenaars }, { data: huurders }, { data: transacties }] =
-    await Promise.all([
-      unitIds.length
-        ? supabase.from("eigenaar").select("*").in("unit_id", unitIds).returns<Eigenaar[]>()
-        : Promise.resolve({ data: [] as Eigenaar[] }),
-      unitIds.length
-        ? supabase.from("huurder").select("*").in("unit_id", unitIds).returns<Huurder[]>()
-        : Promise.resolve({ data: [] as Huurder[] }),
-      supabase
-        .from("transactie")
-        .select("*")
-        .eq("vme_id", active.id)
-        .order("datum", { ascending: false })
-        .returns<Transactie[]>(),
-    ]);
+  const [
+    { data: eigenaars },
+    { data: huurders },
+    { data: transacties },
+    { count: totaalTeControleren },
+  ] = await Promise.all([
+    unitIds.length
+      ? supabase.from("eigenaar").select("*").in("unit_id", unitIds).returns<Eigenaar[]>()
+      : Promise.resolve({ data: [] as Eigenaar[] }),
+    unitIds.length
+      ? supabase.from("huurder").select("*").in("unit_id", unitIds).returns<Huurder[]>()
+      : Promise.resolve({ data: [] as Huurder[] }),
+    // Enkel de verrichtingen van het gekozen boekjaar.
+    supabase
+      .from("transactie")
+      .select("*")
+      .eq("vme_id", active.id)
+      .or(boekjaarOrFilter(boekjaar))
+      .order("datum", { ascending: false })
+      .returns<Transactie[]>(),
+    // Aantal nog te controleren verrichtingen over álle boekjaren heen.
+    supabase
+      .from("transactie")
+      .select("id", { count: "exact", head: true })
+      .eq("vme_id", active.id)
+      .or("match_type.is.null,match_type.eq.onbevestigd")
+      .not("soort", "in", `(${GEEN_MATCH_NODIG.join(",")})`),
+  ]);
 
   const kandidaten: Kandidaat[] = [
     ...(eigenaars ?? []).map((e) => ({
@@ -83,34 +108,25 @@ export default async function BankPage() {
   ];
 
   const unitNaam = new Map((units ?? []).map((u) => [u.id, u.naam]));
+  const geenMatchNodig = new Set(GEEN_MATCH_NODIG);
 
-  // Kosten / interne overboekingen / rente / vorig-jaar-afrekeningen hoeven niet
-  // aan een unit gekoppeld te worden -> apart tonen, niet als "te controleren".
-  const GEEN_MATCH_NODIG = new Set([
-    "kost",
-    "interne_overboeking",
-    "rente",
-    "afrekening",
-    "kapitaalsoproep",
-  ]);
-
-  // Enkel verrichtingen van het gekozen boekjaar (datum of expliciet boekjaar_id).
-  const alle = transacties ?? [];
-  const ditBoekjaar = alle.filter((t) => hoortBijBoekjaar(t, boekjaar));
-  const buitenBoekjaarTeControleren = alle.filter(
-    (t) =>
-      !hoortBijBoekjaar(t, boekjaar) &&
-      (t.match_type === "onbevestigd" || t.match_type === null) &&
-      !GEEN_MATCH_NODIG.has(t.soort),
-  ).length;
+  // De `.or(boekjaarOrFilter)` scopet al op het boekjaar; hoortBijBoekjaar is
+  // hier de zekerheidsfilter (kolom bestaat altijd na de migratie).
+  const ditBoekjaar = (transacties ?? []).filter((t) =>
+    hoortBijBoekjaar(t, boekjaar),
+  );
 
   const onbevestigd = ditBoekjaar.filter(
     (t) => t.match_type === "onbevestigd" || t.match_type === null,
   );
   const teControleren = onbevestigd.filter(
-    (t) => !GEEN_MATCH_NODIG.has(t.soort),
+    (t) => !geenMatchNodig.has(t.soort),
   );
-  const verwerkt = onbevestigd.filter((t) => GEEN_MATCH_NODIG.has(t.soort));
+  const verwerkt = onbevestigd.filter((t) => geenMatchNodig.has(t.soort));
+  const buitenBoekjaarTeControleren = Math.max(
+    0,
+    (totaalTeControleren ?? 0) - teControleren.length,
+  );
   const toegewezen = ditBoekjaar.filter(
     (t) => t.match_type === "automatisch" || t.match_type === "manueel",
   );

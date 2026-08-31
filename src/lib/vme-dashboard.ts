@@ -105,7 +105,12 @@ function cashflowVoorRekening(
       bedrag: som(
         (t) =>
           Number(t.bedrag) > 0 &&
-          t.soort !== "voorschot" &&
+          // voorschot telt hierboven mee; enkel een voorschot zónder toegewezen
+          // betaler valt hier terug zodat het totaal met de drilldown klopt
+          !(
+            t.soort === "voorschot" &&
+            (t.betaler_type === "huurder" || t.betaler_type === "eigenaar")
+          ) &&
           t.soort !== "kapitaalsoproep" &&
           t.soort !== "rente" &&
           t.soort !== "afrekening" &&
@@ -277,6 +282,10 @@ export async function financieleEvolutie(
     .slice(-maxJaren);
   if (reeks.length === 0) return [];
 
+  // Marge van een jaar: een transactie kan via boekjaar_id aan een boekjaar
+  // hangen terwijl haar datum er net buiten valt.
+  const vanaf = `${Number(reeks[0].start_datum.slice(0, 4)) - 1}-01-01`;
+
   type Row = {
     bedrag: number;
     soort: string;
@@ -288,6 +297,7 @@ export async function financieleEvolutie(
     .from("transactie")
     .select("bedrag, soort, rekening, datum, boekjaar_id")
     .eq("vme_id", vmeId)
+    .gte("datum", vanaf)
     .returns<Row[]>();
   const rows: Row[] = metKol.error
     ? ((
@@ -295,6 +305,7 @@ export async function financieleEvolutie(
           .from("transactie")
           .select("bedrag, soort, rekening, datum")
           .eq("vme_id", vmeId)
+          .gte("datum", vanaf)
           .returns<Row[]>()
       ).data ?? [])
     : (metKol.data ?? []);
