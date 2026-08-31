@@ -167,9 +167,8 @@ export default async function DashboardPage() {
     (s, h) => s + h.totaal_kosten,
     0,
   );
-  const bankSaldo =
-    (overzicht.zicht.saldoEind ?? overzicht.zicht.mutatie) +
-    (overzicht.spaar.saldoEind ?? overzicht.spaar.mutatie);
+  // Saldo van de spaarrekening: altijd uit het bankafschrift, nooit berekend.
+  const spaarSaldo = overzicht.spaar.saldoEind;
 
   return (
     <div className="space-y-6">
@@ -183,28 +182,32 @@ export default async function DashboardPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Inkomsten (spaarrekening)"
+          label="Saldo spaarrekening"
+          value={spaarSaldo != null ? euro(spaarSaldo) : "—"}
+          sub={
+            spaarSaldo != null
+              ? "volgens het bankafschrift"
+              : "upload het jaarafschrift"
+          }
+          icon={Landmark}
+          color="blue"
+          href="/admin/financien/spaar"
+        />
+        <StatCard
+          label="Inkomsten spaarrekening"
           value={euro(overzicht.spaar.totaalIn)}
-          sub="reservefonds + kapitaalopvragingen"
+          sub="reservefonds, kapitaal en rente"
           icon={TrendingUp}
           color="emerald"
           href="/admin/dashboard/spaar-in"
         />
         <StatCard
-          label="Uitgaven (spaarrekening)"
+          label="Uitgaven spaarrekening"
           value={euro(Math.abs(overzicht.spaar.totaalUit))}
-          sub="kosten + overboekingen"
+          sub="kosten + overboekingen naar de zichtrekening"
           icon={TrendingDown}
           color="rose"
           href="/admin/dashboard/spaar-uit"
-        />
-        <StatCard
-          label="Bank saldo"
-          value={euro(bankSaldo)}
-          sub="zicht + spaar"
-          icon={Landmark}
-          color="blue"
-          href="/admin/financien/bank"
         />
         <StatCard
           label="Contacten"

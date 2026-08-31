@@ -191,11 +191,13 @@ function classificeer(tx, ctx) {
       (r.naam_bevat && naam.toUpperCase().includes(r.naam_bevat.toUpperCase())),
   );
 
-  if (txIban && (txIban === nz(ctx.vmeZichtIban) || txIban === nz(ctx.vmeSpaarIban)))
-    return { soort: "interne_overboeking", gematchte_unit_id: null, betaler_type: null, match_type: "automatisch" };
-
+  // Bankrente: KBC boekt die met de eigen rekening als tegenpartij -> vóór de
+  // interne-overboeking-check.
   if (RE_RENTE.test(naam) || RE_RENTE.test(med))
     return { soort: "rente", gematchte_unit_id: null, betaler_type: null, match_type: "automatisch" };
+
+  if (txIban && (txIban === nz(ctx.vmeZichtIban) || txIban === nz(ctx.vmeSpaarIban)))
+    return { soort: "interne_overboeking", gematchte_unit_id: null, betaler_type: null, match_type: "automatisch" };
 
   if (RE_AFREKENING.test(med)) {
     const w = occ ?? owner;

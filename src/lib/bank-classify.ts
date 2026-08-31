@@ -66,6 +66,17 @@ export function classificeer(
       (tx.mandaatreferte && r.mandaatreferte === tx.mandaatreferte),
   );
 
+  // Bankrente wordt door KBC geboekt met de eigen rekening als tegenpartij;
+  // moet dus vóór de interne-overboeking-check komen.
+  if (RE_RENTE.test(naam) || RE_RENTE.test(med)) {
+    return {
+      soort: "rente",
+      gematchte_unit_id: null,
+      betaler_type: null,
+      match_type: "automatisch",
+    };
+  }
+
   // interne overboeking tussen de eigen rekeningen
   if (
     txIban &&
@@ -73,15 +84,6 @@ export function classificeer(
   ) {
     return {
       soort: "interne_overboeking",
-      gematchte_unit_id: null,
-      betaler_type: null,
-      match_type: "automatisch",
-    };
-  }
-
-  if (RE_RENTE.test(naam) || RE_RENTE.test(med)) {
-    return {
-      soort: "rente",
       gematchte_unit_id: null,
       betaler_type: null,
       match_type: "automatisch",
