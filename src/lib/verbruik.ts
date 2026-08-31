@@ -326,10 +326,11 @@ export async function verbruik5Jaar(
   db: Db,
   vmeId: string,
   boekjaren: (BoekjaarPeriode & { id: string })[],
+  maxJaren = 10,
 ): Promise<Verbruik5Jaar> {
   const reeks = [...boekjaren]
     .sort((a, b) => a.start_datum.localeCompare(b.start_datum))
-    .slice(-5);
+    .slice(-maxJaren);
   if (reeks.length === 0)
     return { boekjaren: [], units: [], perUnit: {}, blok: {} };
 

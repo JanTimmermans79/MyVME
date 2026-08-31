@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveContext } from "@/lib/vme-context";
-import { euro } from "@/lib/format";
+import { euro, datum } from "@/lib/format";
 import {
   kostenNaarRijen,
   opbrengstenNaarRijen,
@@ -34,16 +34,24 @@ const STROMEN: Record<
 
 export default async function DrilldownPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ stroom: string }>;
+  searchParams: Promise<{ bj?: string }>;
 }) {
   const { stroom } = await params;
+  const { bj } = await searchParams;
   const cfg = STROMEN[stroom];
   if (!cfg) notFound();
 
-  const { vme, boekjaar } = await getActiveContext();
-  if (!vme || !boekjaar) return <NoBoekjaar />;
+  const { vme, boekjaar: actief, boekjaren } = await getActiveContext();
+  if (!vme || !actief) return <NoBoekjaar />;
   const db = createAdminClient();
+
+  // ?bj= laat toe een ander boekjaar te bekijken (vanuit de evolutiegrafiek).
+  const boekjaar =
+    (bj && boekjaren.find((b) => b.id === bj)) || actief;
+  const anderBoekjaar = boekjaar.id !== actief.id;
 
   const groepen: { naam: string; rijen: ReturnType<typeof kostenNaarRijen> }[] = [];
 
@@ -105,7 +113,9 @@ export default async function DrilldownPage({
       <div>
         <h1 className="text-xl font-semibold">{cfg.titel}</h1>
         <p className="text-sm text-muted-foreground">
-          Boekjaar · totaal <strong>{euro(totaal)}</strong>
+          Boekjaar {datum(boekjaar.start_datum)} – {datum(boekjaar.eind_datum)}
+          {anderBoekjaar && " (ander dan het actieve boekjaar)"} · totaal{" "}
+          <strong>{euro(totaal)}</strong>
         </p>
       </div>
 

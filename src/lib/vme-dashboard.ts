@@ -215,73 +215,101 @@ export async function vmeBoekjaarOverzicht(
 
 // ---------------------------------------------------------------------------
 
-export interface JaarTotaal {
+export interface FinancieelJaar {
+  boekjaar_id: string;
   label: string;
-  inkomsten: number;
-  uitgaven: number;
+  zichtIn: number;
+  zichtUit: number;
+  zichtSaldo: number | null;
+  spaarIn: number;
+  spaarUit: number;
+  spaarSaldo: number | null;
 }
 
-const INKOMST_SOORT = new Set(["voorschot", "kapitaalsoproep", "rente"]);
-
 /**
- * Inkomsten/uitgaven van de VME-SPAARREKENING per boekjaar (max 5, oud -> nieuw).
- * Huurdervoorschotten (zichtrekening) zijn geen VME-cashflow.
+ * Bank-cashflow per rekening per boekjaar, tot `maxJaren` terug (oud -> nieuw).
+ * In = alle positieve verrichtingen behalve `kost`; Uit = alle negatieve.
+ * Saldo = eindsaldo van het laatste uittreksel dat in het boekjaar valt.
  */
-export async function jaarlijkseTotalen(
+export async function financieleEvolutie(
   db: Db,
   vmeId: string,
   boekjaren: BoekjaarPeriode[],
-): Promise<JaarTotaal[]> {
+  maxJaren = 10,
+): Promise<FinancieelJaar[]> {
   const reeks = [...boekjaren]
     .sort((a, b) => a.start_datum.localeCompare(b.start_datum))
-    .slice(-5);
+    .slice(-maxJaren);
   if (reeks.length === 0) return [];
 
   type Row = {
     bedrag: number;
     soort: string;
+    rekening: VmeRekening | null;
     datum: string;
     boekjaar_id?: string | null;
   };
   const metKol = await db
     .from("transactie")
-    .select("bedrag, soort, datum, boekjaar_id")
+    .select("bedrag, soort, rekening, datum, boekjaar_id")
     .eq("vme_id", vmeId)
-    .eq("rekening", "spaar")
     .returns<Row[]>();
   const rows: Row[] = metKol.error
     ? ((
         await db
           .from("transactie")
-          .select("bedrag, soort, datum")
+          .select("bedrag, soort, rekening, datum")
           .eq("vme_id", vmeId)
-          .eq("rekening", "spaar")
           .returns<Row[]>()
       ).data ?? [])
     : (metKol.data ?? []);
 
+  const { data: uittreksels } = await db
+    .from("bankuittreksel")
+    .select("rekening, periode_van, periode_tot, saldo_eind")
+    .eq("vme_id", vmeId)
+    .order("periode_van", { ascending: true });
+  const us = (uittreksels ?? []) as {
+    rekening: VmeRekening;
+    periode_van: string;
+    periode_tot: string;
+    saldo_eind: number | null;
+  }[];
+
   return reeks.map((bj) => {
     const inPeriode = rows.filter((r) => hoortBijBoekjaar(r, bj));
-    const inkomsten = inPeriode
-      .filter(
-        (r) =>
-          INKOMST_SOORT.has(r.soort) ||
-          (r.soort === "afrekening" && Number(r.bedrag) > 0),
-      )
-      .reduce((s, r) => s + Number(r.bedrag), 0);
-    const uitgaven = inPeriode
-      .filter(
-        (r) =>
-          (r.soort === "kost" ||
-            r.soort === "terugbetaling" ||
-            r.soort === "interne_overboeking") &&
-          Number(r.bedrag) < 0,
-      )
-      .reduce((s, r) => s + Math.abs(Number(r.bedrag)), 0);
+    const perRekening = (rek: VmeRekening) => {
+      const eigen = inPeriode.filter((r) => r.rekening === rek);
+      const inn = round2(
+        eigen
+          .filter((r) => Number(r.bedrag) > 0 && r.soort !== "kost")
+          .reduce((s, r) => s + Number(r.bedrag), 0),
+      );
+      const uit = round2(
+        eigen
+          .filter((r) => Number(r.bedrag) < 0)
+          .reduce((s, r) => s + Math.abs(Number(r.bedrag)), 0),
+      );
+      const inBj = us.filter(
+        (u) =>
+          u.rekening === rek &&
+          u.periode_van <= bj.eind_datum &&
+          u.periode_tot >= bj.start_datum,
+      );
+      const saldo = inBj.length ? inBj[inBj.length - 1].saldo_eind : null;
+      return { inn, uit, saldo };
+    };
+    const z = perRekening("zicht");
+    const s = perRekening("spaar");
     return {
+      boekjaar_id: bj.id,
       label: bj.eind_datum.slice(0, 4),
-      inkomsten: round2(inkomsten),
-      uitgaven: round2(uitgaven),
+      zichtIn: z.inn,
+      zichtUit: z.uit,
+      zichtSaldo: z.saldo,
+      spaarIn: s.inn,
+      spaarUit: s.uit,
+      spaarSaldo: s.saldo,
     };
   });
 }
@@ -293,15 +321,16 @@ export interface GedeeldeKosten {
   jaren: { label: string; boekjaar_id: string; perCategorie: Record<string, number> }[];
 }
 
-/** Bevestigde kosten per categorie per boekjaar (laatste 5, oud -> nieuw). */
+/** Bevestigde kosten per categorie per boekjaar (tot `maxJaren`, oud -> nieuw). */
 export async function gedeeldeKostenPerJaar(
   db: Db,
   vmeId: string,
   boekjaren: (BoekjaarPeriode & { id: string })[],
+  maxJaren = 10,
 ): Promise<GedeeldeKosten> {
   const reeks = [...boekjaren]
     .sort((a, b) => a.start_datum.localeCompare(b.start_datum))
-    .slice(-5);
+    .slice(-maxJaren);
   if (reeks.length === 0) return { categorieen: [], jaren: [] };
 
   const { data } = await db

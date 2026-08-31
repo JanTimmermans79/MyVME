@@ -18,7 +18,7 @@ import { getActiveContext } from "@/lib/vme-context";
 import { euro, datum } from "@/lib/format";
 import {
   vmeBoekjaarOverzicht,
-  jaarlijkseTotalen,
+  financieleEvolutie,
   gedeeldeKostenPerJaar,
   type RekeningCashflow,
 } from "@/lib/vme-dashboard";
@@ -28,7 +28,7 @@ import { berekenHuurderAfrekeningen } from "@/lib/huurder-afrekening";
 import { NoBoekjaar } from "@/components/no-boekjaar";
 import { StatCard } from "@/components/stat-card";
 import { QuickActions } from "@/components/quick-actions";
-import { BarChart } from "@/components/bar-chart";
+import { EvolutieGrafiek } from "@/components/evolutie-grafiek";
 import { StackedBarChart } from "@/components/stacked-bar-chart";
 import { VerbruikOverzicht } from "@/components/verbruik-overzicht";
 import {
@@ -150,12 +150,12 @@ export default async function DashboardPage() {
   if (!vme || !boekjaar) return <NoBoekjaar />;
 
   const db = createAdminClient();
-  const [overzicht, controle, huurders, jaren, verbruik, gedeeld] =
+  const [overzicht, controle, huurders, financieel, verbruik, gedeeld] =
     await Promise.all([
       vmeBoekjaarOverzicht(db, vme.id, boekjaar),
       voorschotControle(db, boekjaar.id),
       berekenHuurderAfrekeningen(db, boekjaar.id),
-      jaarlijkseTotalen(db, vme.id, boekjaren),
+      financieleEvolutie(db, vme.id, boekjaren),
       verbruik5Jaar(db, vme.id, boekjaren),
       gedeeldeKostenPerJaar(db, vme.id, boekjaren),
     ]);
@@ -281,15 +281,19 @@ export default async function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">
-            Inkomsten en uitgaven van de VME
-          </CardTitle>
+          <CardTitle className="text-base">Evolutie</CardTitle>
           <CardDescription>
-            Spaarrekening, laatste 5 boekjaren
+            Kies een reeks — saldo, inkomsten/uitgaven per rekening, kosten per
+            categorie of verbruik per teller — over de laatste 10 boekjaren. De
+            jaarwaarden onderaan zijn klikbaar naar het detail van dat boekjaar.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <BarChart data={jaren} />
+          <EvolutieGrafiek
+            financieel={financieel}
+            kosten={gedeeld}
+            verbruik={verbruik}
+          />
         </CardContent>
       </Card>
 
@@ -446,7 +450,7 @@ export default async function DashboardPage() {
         <CardHeader>
           <CardTitle className="text-base">Verbruik per appartement</CardTitle>
           <CardDescription>
-            Water en stookolie per boekjaar (m³ en €), laatste 5 boekjaren.
+            Water en stookolie per boekjaar (m³ en €), laatste 10 boekjaren.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -460,7 +464,7 @@ export default async function DashboardPage() {
             Gedeelde kosten van de blok
           </CardTitle>
           <CardDescription>
-            Bevestigde kosten per categorie per boekjaar (laatste 5).
+            Bevestigde kosten per categorie per boekjaar (laatste 10).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
