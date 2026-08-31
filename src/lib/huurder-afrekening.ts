@@ -61,33 +61,28 @@ interface Ctx {
     start_datum: string;
     eind_datum: string;
   };
-  aantalKavels: number;
   prijs: typeof EENHEIDSPRIJS_DEFAULTS;
   gedeeldPerCategorie: Map<string, number>; // som per categorie (gelijk_huurders)
+  /**
+   * Som van 1/(aantal bezette appartementen die dag) over de opgegeven periode.
+   * Gedeeld ÷ boekjaarDagen = het effectieve aandeel van een huurder in de
+   * gedeelde kosten. Leegstand wordt zo automatisch verdeeld over de aanwezige
+   * huurders (regel 3).
+   */
+  deelfactorVoor: (start: string, eind: string) => number;
 }
 
-async function laadContext(db: Db, boekjaarId: string): Promise<Ctx> {
+async function laadContext(
+  db: Db,
+  boekjaarId: string,
+  deelfactorVoor: Ctx["deelfactorVoor"],
+): Promise<Ctx> {
   const { data: bj } = await db
     .from("boekjaar")
     .select("id, vme_id, start_datum, eind_datum")
     .eq("id", boekjaarId)
     .maybeSingle<Ctx["boekjaar"]>();
   if (!bj) throw new Error("Boekjaar niet gevonden.");
-
-  const { data: vme } = await db
-    .from("vme")
-    .select("aantal_kavels")
-    .eq("id", bj.vme_id)
-    .maybeSingle<{ aantal_kavels: number | null }>();
-
-  const { data: unitsCount } = await db
-    .from("unit")
-    .select("id")
-    .eq("vme_id", bj.vme_id);
-  const aantalKavels =
-    vme?.aantal_kavels && vme.aantal_kavels > 0
-      ? vme.aantal_kavels
-      : Math.max(1, (unitsCount ?? []).length);
 
   const { data: ep } = await db
     .from("eenheidsprijs")
@@ -119,9 +114,9 @@ async function laadContext(db: Db, boekjaarId: string): Promise<Ctx> {
 
   return {
     boekjaar: bj,
-    aantalKavels,
     prijs,
     gedeeldPerCategorie: perCategorie,
+    deelfactorVoor,
   };
 }
 
@@ -218,7 +213,6 @@ async function berekenVoorHuurder(
     return base;
   }
 
-  const proRata = dagen / boekjaarDagen;
   const waarschuwingen: string[] = [];
 
   const [koud, warm, cv] = await Promise.all([
@@ -264,17 +258,22 @@ async function berekenVoorHuurder(
     },
   ];
 
-  // gedeelde kosten: per categorie, elk gelijk over de kavels en pro rata dagen
+  // Gedeelde kosten: per dag gelijk verdeeld over de appartementen die die dag
+  // bewoond zijn. Leegstand gaat zo automatisch naar de aanwezige huurders,
+  // en een huurder die halverwege vertrekt/aankomt betaalt enkel voor zijn
+  // aanwezige dagen (regels 1–3).
+  const deelfactor = ctx.deelfactorVoor(periodeStart, periodeEind);
+  const aandeelPct = boekjaarDagen > 0 ? (deelfactor / boekjaarDagen) * 100 : 0;
   let gedeeldAandeel = 0;
   for (const [categorie, totaal] of [...ctx.gedeeldPerCategorie].sort()) {
-    const aandeel = round2((totaal / ctx.aantalKavels) * proRata);
+    const aandeel = round2((Number(totaal) / boekjaarDagen) * deelfactor);
     gedeeldAandeel += aandeel;
     lijnen.push({
       soort: "gedeeld",
-      omschrijving: `${categorie} (aandeel ${dagen}/${boekjaarDagen} dagen)`,
-      hoeveelheid: round2(proRata * 100),
+      omschrijving: `${categorie} (${round2(aandeelPct)}% — ${dagen}/${boekjaarDagen} dagen aanwezig)`,
+      hoeveelheid: round2(aandeelPct),
       eenheid: "%",
-      eenheidsprijs: round2(totaal / ctx.aantalKavels),
+      eenheidsprijs: round2(Number(totaal)),
       bedrag: aandeel,
     });
   }
@@ -362,12 +361,17 @@ export async function berekenHuurderAfrekeningen(
   db: Db,
   boekjaarId: string,
 ): Promise<HuurderAfrekeningResultaat[]> {
-  const ctx = await laadContext(db, boekjaarId);
+  const { data: bjRow } = await db
+    .from("boekjaar")
+    .select("vme_id, start_datum, eind_datum")
+    .eq("id", boekjaarId)
+    .maybeSingle<{ vme_id: string; start_datum: string; eind_datum: string }>();
+  if (!bjRow) throw new Error("Boekjaar niet gevonden.");
 
   const { data: units } = await db
     .from("unit")
     .select("id, naam")
-    .eq("vme_id", ctx.boekjaar.vme_id);
+    .eq("vme_id", bjRow.vme_id);
   const unitList = (units ?? []) as { id: string; naam: string }[];
   const unitIds = unitList.map((u) => u.id);
   const unitNaam = new Map(unitList.map((u) => [u.id, u.naam]));
@@ -382,9 +386,48 @@ export async function berekenHuurderAfrekeningen(
     (h: { ingang_datum: string | null; uitgang_datum: string | null }) => {
       const s = h.ingang_datum ?? "0000-01-01";
       const e = h.uitgang_datum ?? "9999-12-31";
-      return s <= ctx.boekjaar.eind_datum && e >= ctx.boekjaar.start_datum;
+      return s <= bjRow.eind_datum && e >= bjRow.start_datum;
     },
   );
+
+  // Bezetting per dag: hoeveel appartementen zijn bewoond (regel 3 — leegstand
+  // wordt verdeeld over de aanwezige huurders).
+  const bjDagen = dagenInclusief(bjRow.start_datum, bjRow.eind_datum);
+  const bjStartMs = Date.parse(`${bjRow.start_datum}T00:00:00Z`);
+  const dagIndex = (d: string) =>
+    Math.round((Date.parse(`${d}T00:00:00Z`) - bjStartMs) / 86_400_000);
+
+  const unitBezet = new Map<string, Uint8Array>();
+  for (const h of relevant as {
+    unit_id: string;
+    ingang_datum: string | null;
+    uitgang_datum: string | null;
+  }[]) {
+    const s = maxDate(bjRow.start_datum, h.ingang_datum ?? bjRow.start_datum);
+    const e = minDate(bjRow.eind_datum, h.uitgang_datum ?? bjRow.eind_datum);
+    if (e < s) continue;
+    const si = Math.max(0, dagIndex(s));
+    const ei = Math.min(bjDagen - 1, dagIndex(e));
+    let arr = unitBezet.get(h.unit_id);
+    if (!arr) {
+      arr = new Uint8Array(bjDagen);
+      unitBezet.set(h.unit_id, arr);
+    }
+    for (let i = si; i <= ei; i++) arr[i] = 1;
+  }
+  const bezetting = new Uint8Array(bjDagen);
+  for (const arr of unitBezet.values())
+    for (let i = 0; i < bjDagen; i++) if (arr[i]) bezetting[i] += 1;
+
+  const deelfactorVoor = (start: string, eind: string): number => {
+    const si = Math.max(0, dagIndex(start));
+    const ei = Math.min(bjDagen - 1, dagIndex(eind));
+    let f = 0;
+    for (let i = si; i <= ei; i++) if (bezetting[i] > 0) f += 1 / bezetting[i];
+    return f;
+  };
+
+  const ctx = await laadContext(db, boekjaarId, deelfactorVoor);
 
   const out: HuurderAfrekeningResultaat[] = [];
   for (const h of relevant) {
