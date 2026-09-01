@@ -223,10 +223,19 @@ export async function tellerOverzicht(
       Number(v.bedrag_per_maand),
     ]),
   );
-  const huurderVoorUnit = new Map<
-    string,
-    { id: string; naam: string; voorschot: number }
-  >();
+  // Per unit de "relevante" huurder voor dit boekjaar = de meest recent
+  // ingestapte van wie de huurperiode het boekjaar overlapt. Zijn contractstart/
+  // -einde bepalen mee welke meterstand als begin/eind geldt.
+  type RelHuurder = {
+    id: string;
+    naam: string;
+    voorschot: number;
+    ingang: string | null;
+    uitgang: string | null;
+    aangekomen: boolean;
+    vertrokken: boolean;
+  };
+  const huurderVoorUnit = new Map<string, RelHuurder>();
   for (const h of (huurderRows ?? []) as {
     id: string;
     unit_id: string;
@@ -237,22 +246,29 @@ export async function tellerOverzicht(
   }[]) {
     const ingang = h.ingang_datum ?? "0000-01-01";
     const uitgang = h.uitgang_datum ?? "9999-12-31";
-    if (ingang <= boekjaar.eind_datum && uitgang >= boekjaar.start_datum)
-      huurderVoorUnit.set(h.unit_id, {
-        id: h.id,
-        naam: [h.voornaam, h.naam].filter(Boolean).join(" "),
-        voorschot: vshMap.get(h.id) ?? 0,
-      });
+    if (ingang > boekjaar.eind_datum || uitgang < boekjaar.start_datum) continue;
+    const huidig = huurderVoorUnit.get(h.unit_id);
+    if (huidig && (huidig.ingang ?? "0000-01-01") >= ingang) continue;
+    huurderVoorUnit.set(h.unit_id, {
+      id: h.id,
+      naam: [h.voornaam, h.naam].filter(Boolean).join(" "),
+      voorschot: vshMap.get(h.id) ?? 0,
+      ingang: h.ingang_datum,
+      uitgang: h.uitgang_datum,
+      aangekomen:
+        h.ingang_datum != null &&
+        h.ingang_datum >= boekjaar.start_datum &&
+        h.ingang_datum <= boekjaar.eind_datum,
+      vertrokken:
+        h.uitgang_datum != null &&
+        h.uitgang_datum >= boekjaar.start_datum &&
+        h.uitgang_datum <= boekjaar.eind_datum,
+    });
   }
-
-  const boekjaarDagen =
-    Math.round(
-      (Date.parse(boekjaar.eind_datum) - Date.parse(boekjaar.start_datum)) /
-        86_400_000,
-    ) + 1;
 
   return units.map((u) => {
     const ut = tellers.filter((t) => t.unit_id === u.id);
+    const h = huurderVoorUnit.get(u.id) ?? null;
     let deltaWarm = 0;
     let deltaCv = 0;
 
@@ -287,6 +303,27 @@ export async function tellerOverzicht(
               });
           }
         }
+
+        // Contractgrens: kwam de huurder dit boekjaar aan, dan geldt zijn eigen
+        // 'start_huurder'-stand als beginwaarde (ijkpunt) i.p.v. de afsluiting van
+        // het vorige boekjaar. Vertrok hij, dan geldt zijn 'einde_huurder'-stand
+        // (of een oude 'huurderwissel' op zijn naam) als eindwaarde.
+        if (h?.aangekomen) {
+          const s = rows.find(
+            (r) => r.aanleiding === "start_huurder" && r.huurder_id === h.id,
+          );
+          if (s) begin = s;
+        }
+        if (h?.vertrokken) {
+          const e = rows.find(
+            (r) =>
+              (r.aanleiding === "einde_huurder" ||
+                r.aanleiding === "huurderwissel") &&
+              r.huurder_id === h.id,
+          );
+          if (e) eind = e;
+        }
+
         const bW = begin ? Number(begin.waarde) : null;
         const eW = eind ? Number(eind.waarde) : null;
         const delta = bW != null && eW != null && eW >= bW ? round3(eW - bW) : 0;
@@ -326,19 +363,31 @@ export async function tellerOverzicht(
       .sort();
     const laatsteMeting = eindDatums.at(-1) ?? null;
 
-    // Tussentijdse controle: extrapoleer op basis van de laatste meting.
+    // Tussentijdse controle: extrapoleer op basis van de laatste meting, over de
+    // bewoningsperiode van de huurder (bij een mid-boekjaar in-/uitstap loopt die
+    // niet over het hele boekjaar).
+    const periodeStart =
+      h?.ingang && h.ingang > boekjaar.start_datum
+        ? h.ingang
+        : boekjaar.start_datum;
+    const periodeEind =
+      h?.uitgang && h.uitgang < boekjaar.eind_datum
+        ? h.uitgang
+        : boekjaar.eind_datum;
+    const periodeDagen =
+      Math.round(
+        (Date.parse(periodeEind) - Date.parse(periodeStart)) / 86_400_000,
+      ) + 1;
     let geraamdeJaarkost: number | null = null;
-    if (laatsteMeting != null && laatsteMeting > boekjaar.start_datum) {
+    if (laatsteMeting != null && laatsteMeting > periodeStart) {
       const dagen =
         Math.round(
-          (Date.parse(laatsteMeting) - Date.parse(boekjaar.start_datum)) /
-            86_400_000,
+          (Date.parse(laatsteMeting) - Date.parse(periodeStart)) / 86_400_000,
         ) + 1;
-      if (dagen > 20 && dagen < boekjaarDagen)
-        geraamdeJaarkost = round2((totaalKost * boekjaarDagen) / dagen);
+      if (dagen > 20 && dagen < periodeDagen)
+        geraamdeJaarkost = round2((totaalKost / dagen) * 365);
     }
 
-    const h = huurderVoorUnit.get(u.id) ?? null;
     return {
       unit_id: u.id,
       unit_naam: u.naam,

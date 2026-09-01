@@ -147,9 +147,7 @@ export default async function TellersPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Teller</TableHead>
-                          <TableHead className="text-right">
-                            Begin (vorig boekjaar)
-                          </TableHead>
+                          <TableHead className="text-right">Begin</TableHead>
                           <TableHead className="text-right">Eind</TableHead>
                           <TableHead className="text-right">Verbruik</TableHead>
                           <TableHead className="text-right">Kost</TableHead>
@@ -309,10 +307,11 @@ export default async function TellersPage() {
                         </Badge>
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Lineaire raming (verbruik tot nu × heel jaar / verstreken
-                        dagen). Zit de stookseizoen grotendeels in de meting, dan
-                        is dit eerder een bovengrens — de resterende maanden
-                        verbruiken meestal minder.
+                        Lineaire raming (verbruik sinds de start van de
+                        huurperiode, herrekend naar een vol jaar). Zit het
+                        stookseizoen grotendeels in de meting, dan is dit eerder
+                        een bovengrens — de resterende maanden verbruiken meestal
+                        minder.
                       </p>
                     </div>
                   )}
