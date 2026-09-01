@@ -213,6 +213,7 @@ export async function setEenheidsprijs(
       mazoutprijs_per_liter: num(formData, "mazoutprijs_per_liter"),
       cv_liter_per_m3: num(formData, "cv_liter_per_m3"),
       warmwater_liter_per_m3: num(formData, "warmwater_liter_per_m3"),
+      administratie_pct: Math.min(100, Math.max(0, num(formData, "administratie_pct"))),
     };
     const { error } = await db
       .from("eenheidsprijs")
@@ -276,6 +277,9 @@ export async function mazoutprijsUitLeveringen(
       warmwater_liter_per_m3:
         current.data?.warmwater_liter_per_m3 ??
         EENHEIDSPRIJS_DEFAULTS.warmwater_liter_per_m3,
+      administratie_pct:
+        current.data?.administratie_pct ??
+        EENHEIDSPRIJS_DEFAULTS.administratie_pct,
       mazoutprijs_per_liter: Math.round(gewogen * 10000) / 10000,
     };
     const { error } = await db

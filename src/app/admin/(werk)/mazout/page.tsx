@@ -45,9 +45,11 @@ export default async function MazoutPage() {
     0,
   );
   const totaalBedrag = (leveringen ?? []).reduce(
-    (s, l) => s + Number(l.liter) * Number(l.prijs_per_liter),
+    (s, l) =>
+      s + (l.bedrag != null ? Number(l.bedrag) : Number(l.liter) * Number(l.prijs_per_liter)),
     0,
   );
+  const gewogenPrijs = totaalLiter > 0 ? totaalBedrag / totaalLiter : null;
 
   return (
     <div className="space-y-6">
@@ -70,11 +72,21 @@ export default async function MazoutPage() {
               label="Prijs per liter (EUR)"
               name="prijs_per_liter"
               inputMode="decimal"
-              required
+            />
+            <Field
+              label="of totaal factuurbedrag (EUR)"
+              name="bedrag"
+              inputMode="decimal"
             />
             <Field label="Leverancier" name="leverancier" />
             <SubmitButton>Registreren</SubmitButton>
           </ActionForm>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Geef ofwel de prijs per liter, ofwel het totale factuurbedrag in — de
+            andere waarde wordt automatisch berekend. Bij meerdere leveringen in
+            één boekjaar rekent de huurdersafrekening met de gewogen gemiddelde
+            prijs per liter.
+          </p>
         </CardContent>
       </Card>
 
@@ -84,6 +96,9 @@ export default async function MazoutPage() {
           <CardDescription>
             Totaal: {totaalLiter.toLocaleString("nl-BE")} liter ·{" "}
             {euro(totaalBedrag)}
+            {gewogenPrijs != null && (
+              <> · gewogen gemiddelde € {gewogenPrijs.toFixed(4)}/liter</>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -113,7 +128,11 @@ export default async function MazoutPage() {
                       {euro(l.prijs_per_liter)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {euro(Number(l.liter) * Number(l.prijs_per_liter))}
+                      {euro(
+                        l.bedrag != null
+                          ? Number(l.bedrag)
+                          : Number(l.liter) * Number(l.prijs_per_liter),
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <ActionForm action={deleteMazout} hiddenFields={{ id: l.id }}>

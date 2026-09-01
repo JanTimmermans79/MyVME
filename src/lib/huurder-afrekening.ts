@@ -67,7 +67,11 @@ interface Ctx {
     start_datum: string;
     eind_datum: string;
   };
-  prijs: typeof EENHEIDSPRIJS_DEFAULTS;
+  prijs: Record<keyof typeof EENHEIDSPRIJS_DEFAULTS, number>;
+  /** % administratiekosten VME dat mee wordt doorgerekend aan de huurders. */
+  administratiePct: number;
+  /** Herkomst van de gebruikte mazoutprijs (gewogen gemiddelde uit leveringen?). */
+  mazoutBron: { gewogen: boolean; aantal: number; liter: number };
   gedeeldPerCategorie: Map<string, number>; // som per categorie (gelijk_huurders)
   /**
    * Som van 1/(aantal bezette appartementen die dag) over de opgegeven periode.
@@ -90,7 +94,33 @@ async function laadContext(
     .eq("vme_id", bj.vme_id)
     .eq("boekjaar_id", boekjaarId)
     .maybeSingle<typeof EENHEIDSPRIJS_DEFAULTS>();
-  const prijs = { ...EENHEIDSPRIJS_DEFAULTS, ...(ep ?? {}) };
+  const prijs: Record<keyof typeof EENHEIDSPRIJS_DEFAULTS, number> = {
+    ...EENHEIDSPRIJS_DEFAULTS,
+    ...(ep ?? {}),
+  };
+  const administratiePct = Math.max(0, Number(ep?.administratie_pct ?? 0));
+
+  // Gewogen gemiddelde mazoutprijs uit de leveringen van dit boekjaar:
+  //   Σ(liter × prijs_per_liter) / Σ liter.
+  // Zo tellen meerdere leveringen op tot één correcte prijs per liter. Zonder
+  // leveringen valt de afrekening terug op eenheidsprijs.mazoutprijs_per_liter.
+  const { data: leveringen } = await db
+    .from("mazout_levering")
+    .select("liter, prijs_per_liter")
+    .eq("vme_id", bj.vme_id)
+    .gte("datum", bj.start_datum)
+    .lte("datum", bj.eind_datum);
+  const lv = (leveringen ?? []) as { liter: number; prijs_per_liter: number }[];
+  const totLiter = lv.reduce((s, l) => s + Number(l.liter), 0);
+  const totBedrag = lv.reduce(
+    (s, l) => s + Number(l.liter) * Number(l.prijs_per_liter),
+    0,
+  );
+  const mazoutBron = { gewogen: false, aantal: lv.length, liter: round2(totLiter) };
+  if (totLiter > 0) {
+    prijs.mazoutprijs_per_liter = round3(totBedrag / totLiter);
+    mazoutBron.gewogen = true;
+  }
 
   const { data: kosten } = await db
     .from("kosten")
@@ -115,6 +145,8 @@ async function laadContext(
   return {
     boekjaar: bj,
     prijs,
+    administratiePct,
+    mazoutBron,
     gedeeldPerCategorie: perCategorie,
     deelfactorVoor,
   };
@@ -335,7 +367,11 @@ async function berekenVoorHuurder(
     },
     {
       soort: "stookolie",
-      omschrijving: `Stookolie (CV ${cv.delta} m³ + warm water ${warm.delta} m³)`,
+      omschrijving:
+        `Stookolie (CV ${cv.delta} m³ + warm water ${warm.delta} m³)` +
+        (ctx.mazoutBron.gewogen
+          ? ` — gem. € ${ctx.prijs.mazoutprijs_per_liter.toFixed(3)}/l uit ${ctx.mazoutBron.aantal} levering(en)`
+          : ""),
       hoeveelheid: stookolieLiter,
       eenheid: "liter",
       eenheidsprijs: ctx.prijs.mazoutprijs_per_liter,
@@ -364,9 +400,24 @@ async function berekenVoorHuurder(
   }
   gedeeldAandeel = round2(gedeeldAandeel);
 
-  const totaalKosten = round2(
-    koudKost + warmKost + stookolieKost + gedeeldAandeel,
-  );
+  // Administratiekosten VME: een % op (individueel verbruik + aandeel gedeelde
+  // kosten), enkel doorgerekend aan de huurders wanneer een percentage is
+  // ingesteld bij de eenheidsprijzen van dit boekjaar.
+  const subtotaal = round2(koudKost + warmKost + stookolieKost + gedeeldAandeel);
+  let administratieKost = 0;
+  if (ctx.administratiePct > 0) {
+    administratieKost = round2((subtotaal * ctx.administratiePct) / 100);
+    lijnen.push({
+      soort: "administratie",
+      omschrijving: `Administratiekosten VME (${ctx.administratiePct}%)`,
+      hoeveelheid: ctx.administratiePct,
+      eenheid: "%",
+      eenheidsprijs: subtotaal,
+      bedrag: administratieKost,
+    });
+  }
+
+  const totaalKosten = round2(subtotaal + administratieKost);
 
   // voorschot verwacht
   const { data: vsh } = await db

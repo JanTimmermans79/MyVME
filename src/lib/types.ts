@@ -173,6 +173,7 @@ export interface MazoutLevering {
   datum: string;
   liter: number;
   prijs_per_liter: number;
+  bedrag: number | null;
   leverancier: string | null;
   created_at: string;
 }
@@ -281,6 +282,7 @@ export interface Eenheidsprijs {
   mazoutprijs_per_liter: number;
   cv_liter_per_m3: number;
   warmwater_liter_per_m3: number;
+  administratie_pct: number;
   created_at: string;
 }
 
@@ -289,6 +291,7 @@ export const EENHEIDSPRIJS_DEFAULTS = {
   mazoutprijs_per_liter: 0.81,
   cv_liter_per_m3: 0.2,
   warmwater_liter_per_m3: 1.0,
+  administratie_pct: 0,
 } as const;
 
 export interface Afrekening {

@@ -20,14 +20,30 @@ export async function createMazout(
       return { ok: false, error: "Datum, liter en prijs zijn verplicht." };
 
     const liter = num(formData, "liter");
-    const prijs_per_liter = num(formData, "prijs_per_liter");
     if (liter <= 0) return { ok: false, error: "Aantal liter moet groter dan 0 zijn." };
+
+    // Je mag ofwel de prijs per liter ingeven, ofwel het totale factuurbedrag.
+    // Ontbreekt de prijs, dan leiden we die af uit het bedrag (en omgekeerd).
+    const bedragInput = num(formData, "bedrag");
+    let prijs_per_liter = num(formData, "prijs_per_liter");
+    let bedrag: number | null = bedragInput > 0 ? bedragInput : null;
+    if (prijs_per_liter <= 0 && bedrag != null) {
+      prijs_per_liter = Math.round((bedrag / liter) * 10000) / 10000;
+    } else if (bedrag == null && prijs_per_liter > 0) {
+      bedrag = Math.round(prijs_per_liter * liter * 100) / 100;
+    }
+    if (prijs_per_liter <= 0)
+      return {
+        ok: false,
+        error: "Geef een prijs per liter of een totaal factuurbedrag in.",
+      };
 
     const { error } = await db.from("mazout_levering").insert({
       vme_id,
       datum,
       liter,
       prijs_per_liter,
+      bedrag,
       leverancier: optStr(formData, "leverancier"),
     });
     if (error) return { ok: false, error: error.message };

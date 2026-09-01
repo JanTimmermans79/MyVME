@@ -89,8 +89,19 @@ export function EenheidsprijsForm({
           inputMode="decimal"
           defaultValue={String(d.warmwater_liter_per_m3)}
         />
-        <div className="sm:col-span-2 lg:col-span-4">
+        <Field
+          label="Administratiekost VME (%)"
+          name="administratie_pct"
+          inputMode="decimal"
+          defaultValue={String(d.administratie_pct ?? 0)}
+        />
+        <div className="sm:col-span-2 lg:col-span-4 space-y-1">
           <SubmitButton>Opslaan</SubmitButton>
+          <p className="text-xs text-muted-foreground">
+            Het administratiepercentage wordt in de huurdersafrekening op het
+            eigen verbruik + aandeel gedeelde kosten gerekend. 0 % = niet
+            doorrekenen.
+          </p>
         </div>
       </ActionForm>
       <ActionForm
