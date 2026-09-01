@@ -44,9 +44,22 @@ const TYPE_LABEL: Record<string, string> = {
 
 const AANLEIDING_OPTIES = [
   { value: "boekjaareinde", label: "Einde boekjaar" },
-  { value: "huurderwissel", label: "Huurderwissel" },
+  { value: "einde_huurder", label: "Einde huurder" },
+  { value: "start_huurder", label: "Start nieuwe huurder" },
   { value: "tussentijds", label: "Tussentijds" },
+  { value: "huurderwissel", label: "Huurderwissel (oud)" },
 ];
+
+const AANLEIDING_LABEL: Record<string, string> = Object.fromEntries(
+  AANLEIDING_OPTIES.map((o) => [o.value, o.label]),
+);
+
+/** Aanleidingen die aan een specifieke huurder hangen. */
+const HUURDER_AANLEIDINGEN = new Set([
+  "einde_huurder",
+  "start_huurder",
+  "huurderwissel",
+]);
 
 export function EenheidsprijsForm({
   vmeId,
@@ -163,7 +176,9 @@ export function NieuweMeterstandDialog({
   boekjaarEind: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [aanleiding, setAanleiding] = useState("boekjaareinde");
   const heeft = new Set(tellers.map((t) => t.type));
+  const vraagtHuurder = HUURDER_AANLEIDINGEN.has(aanleiding);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -198,24 +213,35 @@ export function NieuweMeterstandDialog({
             />
             <div className="space-y-1.5">
               <Label htmlFor="aanleiding">Aanleiding</Label>
-              <Select name="aanleiding" defaultValue="boekjaareinde">
+              <Select
+                name="aanleiding"
+                value={aanleiding}
+                onValueChange={setAanleiding}
+              >
                 <SelectTrigger id="aanleiding" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="boekjaareinde">Einde boekjaar</SelectItem>
-                  <SelectItem value="huurderwissel">Huurderwissel</SelectItem>
+                  <SelectItem value="einde_huurder">Einde huurder</SelectItem>
+                  <SelectItem value="start_huurder">
+                    Start nieuwe huurder
+                  </SelectItem>
                   <SelectItem value="tussentijds">Tussentijds</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
-          {huurders.length > 0 && (
+          {vraagtHuurder && huurders.length > 0 && (
             <div className="space-y-1.5">
-              <Label htmlFor="huurder_id">Huurder (bij huurderwissel)</Label>
+              <Label htmlFor="huurder_id">
+                {aanleiding === "start_huurder"
+                  ? "Nieuwe huurder (ijkpunt voor zijn verbruik)"
+                  : "Vertrekkende huurder (eindstand)"}
+              </Label>
               <Select name="huurder_id">
                 <SelectTrigger id="huurder_id" className="w-full">
-                  <SelectValue placeholder="(geen)" />
+                  <SelectValue placeholder="(kies huurder)" />
                 </SelectTrigger>
                 <SelectContent>
                   {huurders.map((h) => (
@@ -277,6 +303,8 @@ export function EditMeterstandGroep({
   boekjaarEind: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [gekozenAanleiding, setGekozenAanleiding] = useState(aanleiding);
+  const vraagtHuurder = HUURDER_AANLEIDINGEN.has(gekozenAanleiding);
   const waardeVan = (type: string) =>
     items.find((i) => i.type === type)?.waarde ?? null;
   const idVan = (type: string) => items.find((i) => i.type === type)?.id ?? null;
@@ -300,7 +328,7 @@ export function EditMeterstandGroep({
             );
           })}
           <Badge variant="secondary" className="px-1 py-0 text-[10px]">
-            {aanleiding}
+            {AANLEIDING_LABEL[aanleiding] ?? aanleiding}
           </Badge>
           <span className="ml-auto text-muted-foreground">bewerken →</span>
         </button>
@@ -335,7 +363,11 @@ export function EditMeterstandGroep({
             />
             <div className="space-y-1.5">
               <Label htmlFor={`edit-aanleiding-${alleIds}`}>Aanleiding</Label>
-              <Select name="aanleiding" defaultValue={aanleiding}>
+              <Select
+                name="aanleiding"
+                value={gekozenAanleiding}
+                onValueChange={setGekozenAanleiding}
+              >
                 <SelectTrigger
                   id={`edit-aanleiding-${alleIds}`}
                   className="w-full"
@@ -352,10 +384,12 @@ export function EditMeterstandGroep({
               </Select>
             </div>
           </div>
-          {huurders.length > 0 && (
+          {vraagtHuurder && huurders.length > 0 && (
             <div className="space-y-1.5">
               <Label htmlFor={`edit-huurder-${alleIds}`}>
-                Huurder (bij huurderwissel)
+                {gekozenAanleiding === "start_huurder"
+                  ? "Nieuwe huurder (ijkpunt voor zijn verbruik)"
+                  : "Vertrekkende huurder (eindstand)"}
               </Label>
               <Select
                 name="huurder_id"

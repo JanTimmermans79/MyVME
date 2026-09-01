@@ -91,8 +91,11 @@ export default async function TellersPage() {
         <p className="text-sm text-muted-foreground">
           Boekjaar {datum(boekjaar.start_datum)} – {datum(boekjaar.eind_datum)}.
           De beginstand is de afrekeningswaarde van het vorige boekjaar. Voer per
-          appartement de eindstand in; tussentijdse standen (huurderwissel,
-          controle) tellen mee voor het overzicht, niet voor de jaarafrekening.
+          appartement de eindstand in. Bij een huurderwissel geef je een{" "}
+          <em>einde huurder</em>-stand (eindpunt van de vertrekker) en een{" "}
+          <em>start nieuwe huurder</em>-stand (ijkpunt van de nieuwe huurder) in;
+          een <em>tussentijdse</em> controlestand telt enkel mee voor het
+          overzicht, niet voor de jaarafrekening.
         </p>
       </div>
 

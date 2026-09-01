@@ -253,8 +253,11 @@ export interface VoorschotHuurder {
 export type TellerType = "warm_water" | "koud_water" | "cv";
 export type MeterstandAanleiding =
   | "boekjaareinde"
-  | "huurderwissel"
-  | "tussentijds";
+  | "einde_huurder"
+  | "start_huurder"
+  | "tussentijds"
+  /** @deprecated opgesplitst in einde_huurder + start_huurder */
+  | "huurderwissel";
 
 export interface Teller {
   id: string;

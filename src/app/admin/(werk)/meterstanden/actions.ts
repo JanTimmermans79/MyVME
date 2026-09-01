@@ -12,6 +12,13 @@ import { EENHEIDSPRIJS_DEFAULTS, type TellerType } from "@/lib/types";
 
 const TYPES: TellerType[] = ["koud_water", "warm_water", "cv"];
 
+/** Aanleidingen die aan een specifieke huurder hangen. */
+const HUURDER_AANLEIDINGEN = new Set([
+  "einde_huurder",
+  "start_huurder",
+  "huurderwissel",
+]);
+
 export async function maakTellers(
   _prev: ActionState,
   formData: FormData,
@@ -57,11 +64,17 @@ export async function nieuweMeterstanden(
     const unit_id = str(formData, "unit_id");
     const datum = str(formData, "datum");
     const aanleiding = str(formData, "aanleiding") || "tussentijds";
-    // Een huurder hangt enkel aan een huurderwissel-stand.
-    const huurder_id =
-      aanleiding === "huurderwissel" ? optStr(formData, "huurder_id") : null;
+    // Een huurder hangt enkel aan een einde/start-huurder-stand.
+    const huurder_id = HUURDER_AANLEIDINGEN.has(aanleiding)
+      ? optStr(formData, "huurder_id")
+      : null;
     if (!unit_id || !datum)
       return { ok: false, error: "Unit en datum zijn verplicht." };
+    if (HUURDER_AANLEIDINGEN.has(aanleiding) && !huurder_id)
+      return {
+        ok: false,
+        error: "Kies de huurder bij een einde- of startstand.",
+      };
 
     // Alleen standen binnen het gekozen boekjaar (paar dagen marge voor de
     // eindstand die soms 1-2 dagen voor/na de boekjaargrens opgenomen wordt).
@@ -167,11 +180,17 @@ export async function updateMeterstanden(
         };
     }
 
-    // huurder_id volgt de aanleiding: enkel een huurderwissel draagt een huurder.
+    // huurder_id volgt de aanleiding: enkel einde/start-huurder draagt een huurder.
+    const draagtHuurder = HUURDER_AANLEIDINGEN.has(aanleiding);
+    if (draagtHuurder && !huurder_id)
+      return {
+        ok: false,
+        error: "Kies de huurder bij een einde- of startstand.",
+      };
     const patchBasis = {
       datum,
       aanleiding,
-      huurder_id: aanleiding === "huurderwissel" ? huurder_id : null,
+      huurder_id: draagtHuurder ? huurder_id : null,
     };
 
     let n = 0;

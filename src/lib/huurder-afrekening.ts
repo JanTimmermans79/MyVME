@@ -158,7 +158,11 @@ async function meterDelta(
   type: TellerType,
   periodeStart: string,
   periodeEind: string,
-  huurderId: string | null,
+  /** Deze huurder vertrok dit boekjaar → eigen 'einde_huurder'-stand als eindpunt. */
+  eindHuurderId: string | null,
+  /** Deze huurder kwam dit boekjaar aan → eigen 'start_huurder'-stand als ijkpunt. */
+  startHuurderId: string | null,
+  /** Vorige huurder van de unit — voor de terugval op een oude 'huurderwissel'. */
   vorigeHuurderId: string | null,
 ): Promise<{ delta: number; waarschuwing: string | null }> {
   const { data: teller } = await db
@@ -197,33 +201,44 @@ async function meterDelta(
     return { voor, na };
   };
 
-  // Eerst met afrekeningswaarden (boekjaareinde / huurderwissel).
-  const grens = alle.filter((r) => r.aanleiding !== "tussentijds");
-  const basis = grens.length >= 2 ? kies(grens) : kies(alle);
+  // Datum-gebaseerde basis: enkel de vaste jaargrensstanden (boekjaareinde).
+  const jaargrens = alle.filter((r) => r.aanleiding === "boekjaareinde");
+  const basis = jaargrens.length >= 2 ? kies(jaargrens) : kies(alle);
 
-  // Een huurderwissel-stand op naam is de eindstand van die huurder én de
-  // beginstand van de volgende — ongeacht op welke dag de meter is opgenomen.
-  // Enkel gebruiken als de opname na de datum-gebaseerde beginstand valt (dus
-  // binnen deze afrekeningsperiode, niet die van een vorig boekjaar).
-  const wisselEindKand = huurderId
-    ? alle.find(
-        (r) => r.aanleiding === "huurderwissel" && r.huurder_id === huurderId,
-      )
-    : undefined;
-  const wisselBeginKand = vorigeHuurderId
+  // Eindpunt: de eigen 'einde_huurder'-stand van een huurder die dit boekjaar
+  // vertrok (of een oude, nog niet gesplitste 'huurderwissel' op zijn naam).
+  const eindKand = eindHuurderId
     ? alle.find(
         (r) =>
-          r.aanleiding === "huurderwissel" && r.huurder_id === vorigeHuurderId,
+          (r.aanleiding === "einde_huurder" ||
+            r.aanleiding === "huurderwissel") &&
+          r.huurder_id === eindHuurderId,
       )
     : undefined;
+  // IJkpunt: de eigen 'start_huurder'-stand van een huurder die dit boekjaar
+  // aankwam. Terugval: de oude 'huurderwissel'-stand van de vorige huurder,
+  // die vroeger dienstdeed als beginstand van de nieuwe huurder.
+  const startKand = startHuurderId
+    ? alle.find(
+        (r) => r.aanleiding === "start_huurder" && r.huurder_id === startHuurderId,
+      )
+    : undefined;
+  const legacyStartKand =
+    !startKand && vorigeHuurderId
+      ? alle.find(
+          (r) =>
+            r.aanleiding === "huurderwissel" &&
+            r.huurder_id === vorigeHuurderId,
+        )
+      : undefined;
+
+  // Enkel gebruiken als de opname na de datum-gebaseerde beginstand valt (dus
+  // binnen deze afrekeningsperiode, niet die van een vorig boekjaar).
   const wisselEind =
-    wisselEindKand && wisselEindKand.datum > basis.voor.datum
-      ? wisselEindKand
-      : undefined;
+    eindKand && eindKand.datum > basis.voor.datum ? eindKand : undefined;
+  const beginKand = startKand ?? legacyStartKand;
   const wisselBegin =
-    wisselBeginKand && wisselBeginKand.datum >= basis.voor.datum
-      ? wisselBeginKand
-      : undefined;
+    beginKand && beginKand.datum >= basis.voor.datum ? beginKand : undefined;
 
   let voor = wisselBegin ?? basis.voor;
   let na = wisselEind ?? basis.na;
@@ -328,8 +343,9 @@ async function berekenVoorHuurder(
       t,
       periodeStart,
       periodeEind,
-      // Wissel-stand op naam alleen als de wissel in dit boekjaar viel.
+      // Grensstanden op naam alleen als de wissel in dit boekjaar viel.
       vertrokkenInBoekjaar ? huurder.id : null,
+      aangekomenInBoekjaar ? huurder.id : null,
       aangekomenInBoekjaar ? vorigeHuurderId : null,
     );
   const [koud, warm, cv] = await Promise.all([

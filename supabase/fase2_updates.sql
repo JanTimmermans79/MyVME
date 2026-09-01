@@ -140,7 +140,7 @@ create table if not exists public.meterstand (
   datum      date not null,
   waarde     numeric(14,3) not null check (waarde >= 0),
   aanleiding text not null default 'tussentijds'
-             check (aanleiding in ('boekjaareinde','huurderwissel','tussentijds')),
+             check (aanleiding in ('boekjaareinde','huurderwissel','einde_huurder','start_huurder','tussentijds')),
   huurder_id uuid references public.huurder(id) on delete set null,
   created_at timestamptz not null default now()
 );
