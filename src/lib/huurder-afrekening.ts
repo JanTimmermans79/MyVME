@@ -240,19 +240,19 @@ async function meterDelta(
   const wisselBegin =
     beginKand && beginKand.datum >= basis.voor.datum ? beginKand : undefined;
 
-  let voor = wisselBegin ?? basis.voor;
+  const voor = wisselBegin ?? basis.voor;
   let na = wisselEind ?? basis.na;
 
-  // Geen bruikbare eindstand voor deze periode? Val terug op de laatste
-  // (tussentijdse) meting zodat het verbruik toch voorlopig zichtbaar is.
-  if (voor === na) {
-    const fb = kies(alle);
-    const v2 = wisselBegin ?? fb.voor;
-    const n2 = wisselEind ?? fb.na;
-    if (v2 !== n2) {
-      voor = v2;
-      na = n2;
-    }
+  // Geen bruikbare eindstand ná 'voor'? (bv. een nieuwe huurder wiens
+  // start_huurder-stand later valt dan de laatste jaargrensstand.) Val terug op
+  // de laatste meting binnen de periode zodat het verbruik voorlopig zichtbaar
+  // is.
+  if (voor === na || na.datum < voor.datum) {
+    const laatste =
+      [...alle].reverse().find(
+        (r) => r.datum >= voor.datum && r.datum <= periodeEind && r !== voor,
+      ) ?? na;
+    if (laatste !== voor && laatste.datum >= voor.datum) na = laatste;
   }
   const voorlopig = na.aanleiding === "tussentijds";
 
