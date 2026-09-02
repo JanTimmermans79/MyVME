@@ -116,10 +116,14 @@ export default async function PolisDetailPage({
         <CardContent className="grid gap-x-8 gap-y-2 pt-6 text-sm sm:grid-cols-2">
           <Rij label="Jaarpremie" value={polis.jaarpremie != null ? euro(polis.jaarpremie) : "—"} />
           <Rij
-            label="Vervaldatum"
+            label="Vervaldag"
             value={
               <>
-                {polis.vervaldatum ? datum(polis.vervaldatum) : "—"}
+                {polis.vervaldatum
+                  ? datum(polis.vervaldatum)
+                  : polis.hoofdvervaldag
+                    ? `jaarlijks stilzwijgend verlengd · ${polis.hoofdvervaldag}`
+                    : "—"}
                 {vs === "verlopen" && (
                   <Badge variant="destructive" className="ml-2">
                     verlopen
@@ -134,7 +138,6 @@ export default async function PolisDetailPage({
             }
           />
           <Rij label="Ingangsdatum" value={polis.ingang_datum ? datum(polis.ingang_datum) : "—"} />
-          <Rij label="Hoofdvervaldag" value={polis.hoofdvervaldag ?? "—"} />
           <Rij label="Polisdocument" value={polisDoc ? `📎 ${polisDoc.naam}` : "—"} />
           {polis.opmerkingen && (
             <div className="sm:col-span-2">

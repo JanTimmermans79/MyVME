@@ -116,12 +116,14 @@ function PolisVelden({
           name="vervaldatum"
           type="date"
           defaultValue={v("vervaldatum")}
+          hint="Enkel invullen bij een tijdelijk contract met een echte einddatum."
         />
         <Field
           label="Hoofdvervaldag"
           name="hoofdvervaldag"
           placeholder="bv. 1 januari"
           defaultValue={v("hoofdvervaldag")}
+          hint="De jaarlijkse vervaldag van een doorlopend contract."
         />
       </div>
       <Field

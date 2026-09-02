@@ -145,7 +145,7 @@ export default async function VerzekeringenPage() {
                 <TableHead>Type</TableHead>
                 <TableHead>Polisnr.</TableHead>
                 <TableHead className="text-right">Jaarpremie</TableHead>
-                <TableHead>Vervaldatum</TableHead>
+                <TableHead>Vervaldag</TableHead>
                 <TableHead>Makelaar</TableHead>
                 <TableHead />
               </TableRow>
@@ -174,7 +174,11 @@ export default async function VerzekeringenPage() {
                       {p.jaarpremie != null ? euro(p.jaarpremie) : "—"}
                     </TableCell>
                     <TableCell className="text-xs">
-                      {p.vervaldatum ? datum(p.vervaldatum) : "—"}
+                      {p.vervaldatum
+                        ? datum(p.vervaldatum)
+                        : p.hoofdvervaldag
+                          ? `jaarlijks · ${p.hoofdvervaldag}`
+                          : "—"}
                       {vs !== "ok" && (
                         <span
                           className={`ml-1 rounded px-1 py-0.5 text-[10px] ${VERVALT_BADGE[vs].cls}`}
