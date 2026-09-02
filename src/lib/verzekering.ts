@@ -51,11 +51,20 @@ export async function premiesVoorBoekjaar(
 
   let regels = (data ?? []) as PremieRegel[];
   if (maatschappij) {
-    // Match op de volledige naam of op het eerste betekenisvolle woord
-    // ("KBC Verzekeringen" → ook "KBC ...").
+    // Match op de volledige naam of op een betekenisvol kernwoord eruit
+    // ("KBC Verzekeringen" → "kbc"; "AG Insurance (Fortis AG)" → "fortis").
+    const STOP = new Set([
+      "verzekering",
+      "verzekeringen",
+      "insurance",
+      "assurance",
+      "assurances",
+    ]);
     const m = maatschappij.toLowerCase().trim();
-    const kern = m.split(/\s+/).find((w) => w.length >= 3) ?? m;
-    const zoek = [m, kern];
+    const kernwoorden = m
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length >= 3 && !STOP.has(w));
+    const zoek = [m, ...kernwoorden];
     regels = regels.filter((r) => {
       const hooi = `${r.leverancier ?? ""} ${r.omschrijving ?? ""}`.toLowerCase();
       return zoek.some((s) => hooi.includes(s));
