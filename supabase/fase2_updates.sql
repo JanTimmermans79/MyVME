@@ -622,3 +622,189 @@ comment on column public.vme.email              is 'E-mailadres van de VME';
 comment on column public.vme.webadres           is 'Webadres van de VME';
 comment on column public.vme.syndicus_naam      is 'Naam van de aangestelde syndicus';
 comment on column public.vme.syndicus_sinds     is 'Syndicus aangesteld sinds';
+
+
+-- =============================================================================
+-- Quotiteit per appartement: het aandeel in de gemene delen (meestal /1000 of
+-- /10000). Basis voor het stemgewicht en het aanwezigheidsquorum op de AV.
+-- Optioneel — zonder quotiteiten telt elk appartement voor 1.
+-- =============================================================================
+
+alter table public.unit
+  add column if not exists quotiteit numeric(12,4)
+  check (quotiteit is null or quotiteit >= 0);
+
+comment on column public.unit.quotiteit is
+  'Aandeel van het appartement in de gemene delen (bv. /1000). Basis voor AV-stemgewicht.';
+
+
+-- =============================================================================
+-- AV-module (Algemene Vergadering): vergaderingen, agenda + beslissingen,
+-- aanwezigheden/volmachten. Stemgewicht via unit.quotiteit (zie
+-- 20260902100000_unit_quotiteit.sql).
+-- =============================================================================
+
+create table if not exists public.av_vergadering (
+  id                   uuid primary key default gen_random_uuid(),
+  vme_id               uuid not null references public.vme(id) on delete cascade,
+  boekjaar_id          uuid references public.boekjaar(id) on delete set null,
+  datum                date not null,
+  type                 text not null default 'gewoon'
+                       check (type in ('gewoon', 'buitengewoon')),
+  locatie              text,
+  status               text not null default 'gepland'
+                       check (status in ('gepland', 'gehouden', 'geannuleerd')),
+  notulen_document_id  uuid references public.document(id) on delete set null,
+  omschrijving         text,
+  created_at           timestamptz not null default now()
+);
+create index if not exists av_vergadering_vme_idx
+  on public.av_vergadering (vme_id, datum desc);
+
+create table if not exists public.av_agendapunt (
+  id                 uuid primary key default gen_random_uuid(),
+  av_id              uuid not null references public.av_vergadering(id) on delete cascade,
+  vme_id             uuid not null references public.vme(id) on delete cascade,
+  volgnr             int not null default 1,
+  titel              text not null,
+  toelichting        text,
+  meerderheid        text not null default 'volstrekt'
+                     check (meerderheid in ('informatief', 'volstrekt', 'twee_derde', 'vier_vijfde', 'unaniem')),
+  beslissing         text,
+  stemmen_voor       numeric(12,4),
+  stemmen_tegen      numeric(12,4),
+  stemmen_onthouding numeric(12,4),
+  aangenomen         boolean,
+  actiepunt_id       uuid references public.actiepunt(id) on delete set null,
+  created_at         timestamptz not null default now()
+);
+create index if not exists av_agendapunt_av_idx
+  on public.av_agendapunt (av_id, volgnr);
+create index if not exists av_agendapunt_vme_idx on public.av_agendapunt (vme_id);
+
+create table if not exists public.av_aanwezigheid (
+  id            uuid primary key default gen_random_uuid(),
+  av_id         uuid not null references public.av_vergadering(id) on delete cascade,
+  vme_id        uuid not null references public.vme(id) on delete cascade,
+  unit_id       uuid not null references public.unit(id) on delete cascade,
+  aanwezigheid  text not null default 'afwezig'
+                check (aanwezigheid in ('aanwezig', 'volmacht', 'afwezig')),
+  volmacht_naam text,
+  created_at    timestamptz not null default now(),
+  unique (av_id, unit_id)
+);
+create index if not exists av_aanwezigheid_av_idx on public.av_aanwezigheid (av_id);
+create index if not exists av_aanwezigheid_vme_idx on public.av_aanwezigheid (vme_id);
+
+-- actiepunt kan nu ook uit een AV-beslissing komen
+alter table public.actiepunt drop constraint if exists actiepunt_bron_check;
+alter table public.actiepunt add constraint actiepunt_bron_check
+  check (bron in ('handmatig', 'jaarverslag', 'av'));
+
+-- --- RLS ---------------------------------------------------------------------
+grant select, insert, update, delete on
+  public.av_vergadering, public.av_agendapunt, public.av_aanwezigheid
+  to authenticated;
+
+alter table public.av_vergadering  enable row level security;
+alter table public.av_agendapunt   enable row level security;
+alter table public.av_aanwezigheid enable row level security;
+
+drop policy if exists av_vergadering_admin_all on public.av_vergadering;
+create policy av_vergadering_admin_all on public.av_vergadering
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists av_vergadering_select_eigenaar on public.av_vergadering;
+create policy av_vergadering_select_eigenaar on public.av_vergadering
+  for select to authenticated using (public.owns_vme(vme_id));
+
+drop policy if exists av_agendapunt_admin_all on public.av_agendapunt;
+create policy av_agendapunt_admin_all on public.av_agendapunt
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists av_agendapunt_select_eigenaar on public.av_agendapunt;
+create policy av_agendapunt_select_eigenaar on public.av_agendapunt
+  for select to authenticated using (public.owns_vme(vme_id));
+
+drop policy if exists av_aanwezigheid_admin_all on public.av_aanwezigheid;
+create policy av_aanwezigheid_admin_all on public.av_aanwezigheid
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists av_aanwezigheid_select_eigenaar on public.av_aanwezigheid;
+create policy av_aanwezigheid_select_eigenaar on public.av_aanwezigheid
+  for select to authenticated using (public.owns_vme(vme_id));
+
+comment on table public.av_vergadering is 'Algemene Vergaderingen van de VME.';
+comment on table public.av_agendapunt is 'Agendapunten + beslissingen per AV.';
+comment on table public.av_aanwezigheid is 'Aanwezigheid/volmacht per appartement per AV.';
+
+
+-- =============================================================================
+-- Verzekeringsmodule: polissenregister + schadedossiers. De betaalde premies
+-- blijven gewone kosten (categorie 'verzekering') — die worden read-side
+-- gekoppeld, geen aparte tabel.
+-- =============================================================================
+
+create table if not exists public.verzekering_polis (
+  id            uuid primary key default gen_random_uuid(),
+  vme_id        uuid not null references public.vme(id) on delete cascade,
+  maatschappij  text not null,
+  polisnummer   text,
+  type          text not null default 'brand'
+                check (type in ('brand', 'ba_gebouw', 'rechtsbijstand',
+                                'bestuurdersaansprakelijkheid',
+                                'objectieve_aansprakelijkheid', 'overig')),
+  jaarpremie    numeric(14,2) check (jaarpremie is null or jaarpremie >= 0),
+  ingang_datum  date,
+  vervaldatum   date,
+  hoofdvervaldag text,
+  makelaar      text,
+  document_id   uuid references public.document(id) on delete set null,
+  opmerkingen   text,
+  actief        boolean not null default true,
+  created_at    timestamptz not null default now()
+);
+create index if not exists verzekering_polis_vme_idx
+  on public.verzekering_polis (vme_id);
+
+create table if not exists public.verzekering_schade (
+  id               uuid primary key default gen_random_uuid(),
+  vme_id           uuid not null references public.vme(id) on delete cascade,
+  polis_id         uuid not null references public.verzekering_polis(id) on delete cascade,
+  unit_id          uuid references public.unit(id) on delete set null,
+  datum            date not null,
+  omschrijving     text not null,
+  status           text not null default 'gemeld'
+                   check (status in ('gemeld', 'in_behandeling', 'afgehandeld', 'geweigerd')),
+  dossiernummer    text,
+  schadebedrag     numeric(14,2) check (schadebedrag is null or schadebedrag >= 0),
+  uitgekeerd_bedrag numeric(14,2) check (uitgekeerd_bedrag is null or uitgekeerd_bedrag >= 0),
+  document_id      uuid references public.document(id) on delete set null,
+  created_at       timestamptz not null default now()
+);
+create index if not exists verzekering_schade_polis_idx
+  on public.verzekering_schade (polis_id);
+create index if not exists verzekering_schade_vme_idx
+  on public.verzekering_schade (vme_id);
+
+-- --- RLS ---------------------------------------------------------------------
+grant select, insert, update, delete on
+  public.verzekering_polis, public.verzekering_schade
+  to authenticated;
+
+alter table public.verzekering_polis  enable row level security;
+alter table public.verzekering_schade enable row level security;
+
+drop policy if exists verzekering_polis_admin_all on public.verzekering_polis;
+create policy verzekering_polis_admin_all on public.verzekering_polis
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists verzekering_polis_select_eigenaar on public.verzekering_polis;
+create policy verzekering_polis_select_eigenaar on public.verzekering_polis
+  for select to authenticated using (public.owns_vme(vme_id));
+
+drop policy if exists verzekering_schade_admin_all on public.verzekering_schade;
+create policy verzekering_schade_admin_all on public.verzekering_schade
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+drop policy if exists verzekering_schade_select_eigenaar on public.verzekering_schade;
+create policy verzekering_schade_select_eigenaar on public.verzekering_schade
+  for select to authenticated using (public.owns_vme(vme_id));
+
+comment on table public.verzekering_polis is 'Verzekeringspolissen van de VME.';
+comment on table public.verzekering_schade is 'Schadedossiers per polis.';

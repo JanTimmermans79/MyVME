@@ -112,6 +112,8 @@ export interface Unit {
   id: string;
   vme_id: string;
   naam: string;
+  /** Aandeel in de gemene delen (bv. /1000). Stemgewicht op de AV. */
+  quotiteit: number | null;
   created_at: string;
 }
 
@@ -362,7 +364,7 @@ export interface AfrekeningLijn {
 }
 
 export type ActiepuntStatus = "open" | "bezig" | "afgewerkt";
-export type ActiepuntBron = "handmatig" | "jaarverslag";
+export type ActiepuntBron = "handmatig" | "jaarverslag" | "av";
 
 export interface Actiepunt {
   id: string;
@@ -377,5 +379,141 @@ export interface Actiepunt {
   document_id: string | null;
   created_at: string;
   afgewerkt_op: string | null;
+}
+
+// --- AV (Algemene Vergadering) ---------------------------------------------
+
+export type AvType = "gewoon" | "buitengewoon";
+export type AvStatus = "gepland" | "gehouden" | "geannuleerd";
+export type AvMeerderheid =
+  | "informatief"
+  | "volstrekt"
+  | "twee_derde"
+  | "vier_vijfde"
+  | "unaniem";
+export type Aanwezigheid = "aanwezig" | "volmacht" | "afwezig";
+
+export const AV_TYPE_LABEL: Record<AvType, string> = {
+  gewoon: "Gewone AV",
+  buitengewoon: "Buitengewone AV",
+};
+export const AV_STATUS_LABEL: Record<AvStatus, string> = {
+  gepland: "Gepland",
+  gehouden: "Gehouden",
+  geannuleerd: "Geannuleerd",
+};
+export const AV_MEERDERHEID_LABEL: Record<AvMeerderheid, string> = {
+  informatief: "Informatief (geen stemming)",
+  volstrekt: "Volstrekte meerderheid (1/2)",
+  twee_derde: "Twee derde (2/3)",
+  vier_vijfde: "Vier vijfde (4/5)",
+  unaniem: "Unanimiteit",
+};
+export const AANWEZIGHEID_LABEL: Record<Aanwezigheid, string> = {
+  aanwezig: "Aanwezig",
+  volmacht: "Volmacht",
+  afwezig: "Afwezig",
+};
+
+export interface AvVergadering {
+  id: string;
+  vme_id: string;
+  boekjaar_id: string | null;
+  datum: string;
+  type: AvType;
+  locatie: string | null;
+  status: AvStatus;
+  notulen_document_id: string | null;
+  omschrijving: string | null;
+  created_at: string;
+}
+
+export interface AvAgendapunt {
+  id: string;
+  av_id: string;
+  vme_id: string;
+  volgnr: number;
+  titel: string;
+  toelichting: string | null;
+  meerderheid: AvMeerderheid;
+  beslissing: string | null;
+  stemmen_voor: number | null;
+  stemmen_tegen: number | null;
+  stemmen_onthouding: number | null;
+  aangenomen: boolean | null;
+  actiepunt_id: string | null;
+  created_at: string;
+}
+
+export interface AvAanwezigheid {
+  id: string;
+  av_id: string;
+  vme_id: string;
+  unit_id: string;
+  aanwezigheid: Aanwezigheid;
+  volmacht_naam: string | null;
+  created_at: string;
+}
+
+// --- Verzekeringen ---------------------------------------------------------
+
+export type PolisType =
+  | "brand"
+  | "ba_gebouw"
+  | "rechtsbijstand"
+  | "bestuurdersaansprakelijkheid"
+  | "objectieve_aansprakelijkheid"
+  | "overig";
+export type SchadeStatus =
+  | "gemeld"
+  | "in_behandeling"
+  | "afgehandeld"
+  | "geweigerd";
+
+export const POLIS_TYPE_LABEL: Record<PolisType, string> = {
+  brand: "Brand",
+  ba_gebouw: "BA gebouw",
+  rechtsbijstand: "Rechtsbijstand",
+  bestuurdersaansprakelijkheid: "Bestuurdersaansprakelijkheid",
+  objectieve_aansprakelijkheid: "Objectieve aansprakelijkheid (brand & ontploffing)",
+  overig: "Overig",
+};
+export const SCHADE_STATUS_LABEL: Record<SchadeStatus, string> = {
+  gemeld: "Gemeld",
+  in_behandeling: "In behandeling",
+  afgehandeld: "Afgehandeld",
+  geweigerd: "Geweigerd",
+};
+
+export interface VerzekeringPolis {
+  id: string;
+  vme_id: string;
+  maatschappij: string;
+  polisnummer: string | null;
+  type: PolisType;
+  jaarpremie: number | null;
+  ingang_datum: string | null;
+  vervaldatum: string | null;
+  hoofdvervaldag: string | null;
+  makelaar: string | null;
+  document_id: string | null;
+  opmerkingen: string | null;
+  actief: boolean;
+  created_at: string;
+}
+
+export interface VerzekeringSchade {
+  id: string;
+  vme_id: string;
+  polis_id: string;
+  unit_id: string | null;
+  datum: string;
+  omschrijving: string;
+  status: SchadeStatus;
+  dossiernummer: string | null;
+  schadebedrag: number | null;
+  uitgekeerd_bedrag: number | null;
+  document_id: string | null;
+  created_at: string;
 }
 

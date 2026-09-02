@@ -32,6 +32,14 @@ export function CreateUnitForm({ vmeId }: { vmeId: string }) {
         placeholder="Appartement 2A"
         className="min-w-[16rem]"
       />
+      <Field
+        label="Quotiteit"
+        name="quotiteit"
+        inputMode="decimal"
+        placeholder="bv. 250"
+        hint="Aandeel in de gemene delen (/1000). Optioneel."
+        className="min-w-[10rem]"
+      />
       <SubmitButton>Unit toevoegen</SubmitButton>
     </ActionForm>
   );
@@ -57,6 +65,13 @@ export function EditUnitDialog({ unit }: { unit: Unit }) {
           className="space-y-3"
         >
           <Field label="Naam" name="naam" required defaultValue={unit.naam} />
+          <Field
+            label="Quotiteit"
+            name="quotiteit"
+            inputMode="decimal"
+            defaultValue={unit.quotiteit ?? ""}
+            hint="Aandeel in de gemene delen (/1000). Leeg = telt voor 1 op de AV."
+          />
           <DialogFooter>
             <SubmitButton>Opslaan</SubmitButton>
           </DialogFooter>

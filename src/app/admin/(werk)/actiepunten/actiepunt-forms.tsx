@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Pencil, FileText } from "lucide-react";
 import type { Actiepunt, ActiepuntStatus, Boekjaar } from "@/lib/types";
-import { datum } from "@/lib/format";
 import { ActionForm } from "@/components/action-form";
 import { Field, SubmitButton } from "@/components/form";
 import { Button } from "@/components/ui/button";
@@ -18,12 +17,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  BoekjaarSelect,
+  DocumentSelect,
+  type DocKeuze,
+} from "@/components/keuze-selects";
 import {
   createActiepunt,
   updateActiepunt,
@@ -31,63 +28,7 @@ import {
   setActiepuntStatus,
 } from "./actions";
 
-export interface DocKeuze {
-  id: string;
-  naam: string;
-}
-
-function BoekjaarSelect({
-  boekjaren,
-  defaultValue,
-}: {
-  boekjaren: Boekjaar[];
-  defaultValue?: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label>Boekjaar (optioneel)</Label>
-      <Select name="boekjaar_id" defaultValue={defaultValue}>
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder="(geen)" />
-        </SelectTrigger>
-        <SelectContent>
-          {boekjaren.map((b) => (
-            <SelectItem key={b.id} value={b.id}>
-              {datum(b.start_datum)} – {datum(b.eind_datum)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
-
-function DocumentSelect({
-  documenten,
-  defaultValue,
-}: {
-  documenten: DocKeuze[];
-  defaultValue?: string;
-}) {
-  if (documenten.length === 0) return null;
-  return (
-    <div className="space-y-1.5">
-      <Label>Gekoppeld document (optioneel)</Label>
-      <Select name="document_id" defaultValue={defaultValue}>
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder="(geen)" />
-        </SelectTrigger>
-        <SelectContent>
-          {documenten.map((d) => (
-            <SelectItem key={d.id} value={d.id}>
-              {d.naam}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
+export type { DocKeuze };
 
 export function CreateActiepuntForm({
   vmeId,

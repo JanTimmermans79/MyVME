@@ -17,6 +17,8 @@ const NAV: NavGroup[] = [
       { href: "/admin/meterstanden", label: "Meterstanden", icon: "meterstanden" },
       { href: "/admin/afrekeningen", label: "Afrekeningen", icon: "afrekeningen" },
       { href: "/admin/actiepunten", label: "Actiepunten", icon: "actiepunten" },
+      { href: "/admin/av", label: "Algemene Vergadering", icon: "av" },
+      { href: "/admin/verzekeringen", label: "Verzekeringen", icon: "verzekeringen" },
       { href: "/admin/documenten", label: "Documenten", icon: "documenten" },
       { href: "/admin/instellingen", label: "Instellingen", icon: "instellingen" },
     ],

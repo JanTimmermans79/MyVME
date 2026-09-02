@@ -1,7 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { runAdmin, str, type ActionState } from "@/lib/action-helpers";
+import { runAdmin, str, optStr, type ActionState } from "@/lib/action-helpers";
+
+/** Leeg -> null; anders een niet-negatief getal (komma of punt). */
+function parseQuotiteit(formData: FormData): number | null | { error: string } {
+  const raw = optStr(formData, "quotiteit");
+  if (raw == null) return null;
+  const n = Number(raw.replace(/\s/g, "").replace(",", "."));
+  if (!Number.isFinite(n) || n < 0)
+    return { error: "Quotiteit moet een positief getal zijn." };
+  return n;
+}
 
 function revalidate() {
   revalidatePath("/admin/units");
@@ -17,8 +27,10 @@ export async function createUnit(
     const vme_id = str(formData, "vme_id");
     const naam = str(formData, "naam");
     if (!vme_id || !naam) return { ok: false, error: "Naam is verplicht." };
+    const quotiteit = parseQuotiteit(formData);
+    if (quotiteit && typeof quotiteit === "object") return { ok: false, ...quotiteit };
 
-    const { error } = await db.from("unit").insert({ vme_id, naam });
+    const { error } = await db.from("unit").insert({ vme_id, naam, quotiteit });
     if (error) return { ok: false, error: error.message };
     revalidate();
     return { ok: true, message: "Unit toegevoegd." };
@@ -33,7 +45,12 @@ export async function renameUnit(
     const id = str(formData, "id");
     const naam = str(formData, "naam");
     if (!id || !naam) return { ok: false, error: "Naam is verplicht." };
-    const { error } = await db.from("unit").update({ naam }).eq("id", id);
+    const quotiteit = parseQuotiteit(formData);
+    if (quotiteit && typeof quotiteit === "object") return { ok: false, ...quotiteit };
+    const { error } = await db
+      .from("unit")
+      .update({ naam, quotiteit })
+      .eq("id", id);
     if (error) return { ok: false, error: error.message };
     revalidate();
     return { ok: true, message: "Opgeslagen." };

@@ -76,6 +76,7 @@ export default async function UnitsPage() {
                 <TableRow>
                   <TableHead>Naam</TableHead>
                   <TableHead>Eigenaar(s)</TableHead>
+                  <TableHead className="text-right">Quotiteit</TableHead>
                   <TableHead className="text-right">Acties</TableHead>
                 </TableRow>
               </TableHeader>
@@ -90,11 +91,25 @@ export default async function UnitsPage() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {u.quotiteit ?? <span className="text-muted-foreground">—</span>}
+                    </TableCell>
                     <TableCell className="text-right">
                       <EditUnitDialog unit={u} />
                     </TableCell>
                   </TableRow>
                 ))}
+                {units.some((u) => u.quotiteit != null) && (
+                  <TableRow>
+                    <TableCell className="font-medium" colSpan={2}>
+                      Totaal quotiteit
+                    </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {units.reduce((s, u) => s + (u.quotiteit ?? 0), 0)}
+                    </TableCell>
+                    <TableCell />
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           )}
