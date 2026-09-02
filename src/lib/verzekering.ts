@@ -51,12 +51,15 @@ export async function premiesVoorBoekjaar(
 
   let regels = (data ?? []) as PremieRegel[];
   if (maatschappij) {
-    const m = maatschappij.toLowerCase();
-    regels = regels.filter(
-      (r) =>
-        (r.leverancier ?? "").toLowerCase().includes(m) ||
-        (r.omschrijving ?? "").toLowerCase().includes(m),
-    );
+    // Match op de volledige naam of op het eerste betekenisvolle woord
+    // ("KBC Verzekeringen" → ook "KBC ...").
+    const m = maatschappij.toLowerCase().trim();
+    const kern = m.split(/\s+/).find((w) => w.length >= 3) ?? m;
+    const zoek = [m, kern];
+    regels = regels.filter((r) => {
+      const hooi = `${r.leverancier ?? ""} ${r.omschrijving ?? ""}`.toLowerCase();
+      return zoek.some((s) => hooi.includes(s));
+    });
   }
   const totaal =
     Math.round(regels.reduce((s, r) => s + Number(r.bedrag), 0) * 100) / 100;
