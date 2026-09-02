@@ -42,6 +42,12 @@ export default async function AvPage() {
   const puntenPerAv = new Map<string, number>();
   for (const p of (puntRows ?? []) as { av_id: string }[])
     puntenPerAv.set(p.av_id, (puntenPerAv.get(p.av_id) ?? 0) + 1);
+  const bjLabel = new Map(
+    boekjaren.map((b) => [
+      b.id,
+      `boekjaar ${b.start_datum.slice(0, 4)}-${b.eind_datum.slice(0, 4)}`,
+    ]),
+  );
 
   return (
     <div className="space-y-5">
@@ -103,6 +109,11 @@ export default async function AvPage() {
                 <span className="text-sm text-muted-foreground">
                   {av.locatie}
                 </span>
+              )}
+              {av.boekjaar_id && bjLabel.has(av.boekjaar_id) && (
+                <Badge variant="outline" className="font-normal">
+                  {bjLabel.get(av.boekjaar_id)}
+                </Badge>
               )}
               <span className="text-sm text-muted-foreground">
                 {puntenPerAv.get(av.id) ?? 0} agendapunt(en)
