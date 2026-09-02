@@ -59,8 +59,45 @@ export interface Vme {
   iban_reserve: string | null;
   /** Aantal kavels/appartementen (informatief). */
   aantal_kavels: number | null;
+  // --- VME-gegevens (KBO / juridisch) — allemaal optioneel -------------------
+  ondernemingsnummer: string | null;
+  rechtsvorm: string | null;
+  type_entiteit: string | null;
+  kbo_status: string | null;
+  rechtstoestand: string | null;
+  begindatum: string | null;
+  officiele_naam: string | null;
+  afkorting: string | null;
+  zetel_adres: string | null;
+  telefoon: string | null;
+  email: string | null;
+  webadres: string | null;
+  syndicus_naam: string | null;
+  syndicus_sinds: string | null;
   created_at: string;
 }
+
+/** Optionele VME-gegevens, in de volgorde waarin ze getoond/bewerkt worden. */
+export const VME_GEGEVEN_VELDEN = [
+  { key: "ondernemingsnummer", label: "Ondernemingsnummer", type: "text" },
+  { key: "kbo_status", label: "Status", type: "text" },
+  { key: "rechtstoestand", label: "Rechtstoestand", type: "text" },
+  { key: "begindatum", label: "Begindatum", type: "date" },
+  { key: "officiele_naam", label: "Officiële naam", type: "text" },
+  { key: "afkorting", label: "Afkorting", type: "text" },
+  { key: "zetel_adres", label: "Adres van de zetel", type: "text" },
+  { key: "telefoon", label: "Telefoonnummer", type: "text" },
+  { key: "email", label: "E-mail", type: "text" },
+  { key: "webadres", label: "Webadres", type: "text" },
+  { key: "type_entiteit", label: "Type entiteit", type: "text" },
+  { key: "rechtsvorm", label: "Rechtsvorm", type: "text" },
+  { key: "syndicus_naam", label: "Syndicus", type: "text" },
+  { key: "syndicus_sinds", label: "Syndicus sinds", type: "date" },
+] as const satisfies readonly {
+  key: keyof Vme;
+  label: string;
+  type: "text" | "date";
+}[];
 
 export interface Boekjaar {
   id: string;

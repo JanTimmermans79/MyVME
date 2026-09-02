@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Pencil } from "lucide-react";
 import type { Vme } from "@/lib/types";
+import { VME_GEGEVEN_VELDEN } from "@/lib/types";
 import { ActionForm } from "@/components/action-form";
 import { Field, SubmitButton } from "@/components/form";
 import { ConfirmSubmit } from "@/components/confirm-submit";
@@ -16,6 +17,28 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { createVme, updateVme, deleteVme } from "./actions";
+
+/** Optionele KBO-/juridische gegevens — inklapbaar zodat het formulier rustig blijft. */
+function VmeGegevensVelden({ vme }: { vme?: Vme }) {
+  return (
+    <details className="sm:col-span-2 rounded-md border p-3">
+      <summary className="cursor-pointer text-sm font-medium">
+        VME-gegevens (KBO / juridisch) — optioneel
+      </summary>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        {VME_GEGEVEN_VELDEN.map((v) => (
+          <Field
+            key={v.key}
+            label={v.label}
+            name={v.key}
+            type={v.type === "date" ? "date" : undefined}
+            defaultValue={(vme?.[v.key] as string | null) ?? ""}
+          />
+        ))}
+      </div>
+    </details>
+  );
+}
 
 export function CreateVmeForm() {
   return (
@@ -45,6 +68,7 @@ export function CreateVmeForm() {
         hint="Reservefonds van de VME."
       />
       <Field label="Adres" name="adres" className="sm:col-span-2" />
+      <VmeGegevensVelden />
       <div className="sm:col-span-2">
         <SubmitButton>VME toevoegen</SubmitButton>
       </div>
@@ -61,7 +85,7 @@ export function EditVmeDialog({ vme }: { vme: Vme }) {
           <Pencil className="size-3.5" /> Bewerken
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>VME bewerken</DialogTitle>
         </DialogHeader>
@@ -69,7 +93,7 @@ export function EditVmeDialog({ vme }: { vme: Vme }) {
           action={updateVme}
           hiddenFields={{ id: vme.id }}
           onSuccess={() => setOpen(false)}
-          className="space-y-3"
+          className="grid gap-3 sm:grid-cols-2"
         >
           <Field label="Naam" name="naam" required defaultValue={vme.naam} />
           <Field
@@ -90,8 +114,14 @@ export function EditVmeDialog({ vme }: { vme: Vme }) {
             name="iban_reserve"
             defaultValue={vme.iban_reserve ?? ""}
           />
-          <Field label="Adres" name="adres" defaultValue={vme.adres ?? ""} />
-          <DialogFooter>
+          <Field
+            label="Adres"
+            name="adres"
+            defaultValue={vme.adres ?? ""}
+            className="sm:col-span-2"
+          />
+          <VmeGegevensVelden vme={vme} />
+          <DialogFooter className="sm:col-span-2">
             <SubmitButton>Opslaan</SubmitButton>
           </DialogFooter>
         </ActionForm>

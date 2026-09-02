@@ -15,7 +15,7 @@ const GROEPEN: { titel: string; items: { href: string; label: string; hint: stri
     {
       titel: "VME",
       items: [
-        { href: "/admin/vme", label: "VME-gegevens", hint: "Naam, adres, IBAN's, aantal kavels" },
+        { href: "/admin/vme", label: "VME-gegevens", hint: "Naam, adres, IBAN's, KBO-/juridische gegevens" },
         { href: "/admin/boekjaren", label: "Boekjaren", hint: "Periodes openen, afsluiten, verwijderen" },
       ],
     },
