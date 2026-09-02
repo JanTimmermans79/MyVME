@@ -178,6 +178,9 @@ export default async function ActiepuntenPage() {
                         {a.bron === "jaarverslag" && (
                           <Badge variant="secondary">uit jaarverslag</Badge>
                         )}
+                        {a.bron === "av" && (
+                          <Badge variant="secondary">uit AV</Badge>
+                        )}
                         {a.document_id && docNaam.has(a.document_id) && (
                           <span>· 📎 {docNaam.get(a.document_id)}</span>
                         )}
