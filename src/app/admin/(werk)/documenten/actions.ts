@@ -2,19 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { runAdmin, str, optStr, type ActionState } from "@/lib/action-helpers";
-import { createAdminClient } from "@/lib/supabase/admin";
-
-type Db = ReturnType<typeof createAdminClient>;
-
-async function upload(db: Db, vmeId: string, file: File): Promise<string> {
-  const safeName = file.name.replace(/[^\w.\-]+/g, "_");
-  const pad = `${vmeId}/${crypto.randomUUID()}-${safeName}`;
-  const { error } = await db.storage
-    .from("documenten")
-    .upload(pad, file, { contentType: file.type || undefined });
-  if (error) throw new Error(`Upload mislukt: ${error.message}`);
-  return pad;
-}
+import { uploadNaarDocumenten } from "@/lib/documenten-upload";
 
 export async function uploadDocumenten(
   _prev: ActionState,
@@ -34,7 +22,7 @@ export async function uploadDocumenten(
 
     const rijen = [];
     for (const file of files) {
-      const pad = await upload(db, vme_id, file);
+      const pad = await uploadNaarDocumenten(db, vme_id, file);
       rijen.push({
         vme_id,
         boekjaar_id,

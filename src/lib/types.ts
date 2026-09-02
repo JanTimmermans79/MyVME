@@ -502,6 +502,20 @@ export interface VerzekeringPolis {
   created_at: string;
 }
 
+/** Voorgestelde polisvelden uit een geüpload document (bestandsnaam of AI). */
+export interface PolisExtract {
+  maatschappij?: string;
+  polisnummer?: string;
+  type?: PolisType;
+  jaarpremie?: number;
+  ingang_datum?: string;
+  vervaldatum?: string;
+  hoofdvervaldag?: string;
+  makelaar?: string;
+  bron: "ai" | "bestandsnaam" | "geen";
+  waarschuwing?: string;
+}
+
 export interface VerzekeringSchade {
   id: string;
   vme_id: string;

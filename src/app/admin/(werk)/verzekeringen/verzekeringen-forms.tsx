@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Pencil } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
+import { Pencil, Upload } from "lucide-react";
+import { toast } from "sonner";
 import type {
   PolisType,
   SchadeStatus,
@@ -32,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DocumentSelect, type DocKeuze } from "@/components/keuze-selects";
+import type { PolisExtract } from "@/lib/types";
 import {
   createPolis,
   updatePolis,
@@ -40,6 +42,7 @@ import {
   createSchade,
   updateSchade,
   deleteSchade,
+  verwerkPolisDocument,
 } from "./actions";
 
 const TYPE_OPTIES = Object.entries(POLIS_TYPE_LABEL) as [PolisType, string][];
@@ -67,7 +70,16 @@ function TypeSelect({ defaultValue = "brand" }: { defaultValue?: PolisType }) {
   );
 }
 
-function PolisVelden({ polis }: { polis?: VerzekeringPolis }) {
+function PolisVelden({
+  polis,
+  prefill,
+}: {
+  polis?: VerzekeringPolis;
+  prefill?: PolisExtract;
+}) {
+  const v = <K extends keyof VerzekeringPolis & keyof PolisExtract>(
+    k: K,
+  ): string => String(polis?.[k] ?? prefill?.[k] ?? "");
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -75,21 +87,21 @@ function PolisVelden({ polis }: { polis?: VerzekeringPolis }) {
           label="Maatschappij"
           name="maatschappij"
           required
-          defaultValue={polis?.maatschappij ?? ""}
+          defaultValue={v("maatschappij")}
         />
         <Field
           label="Polisnummer"
           name="polisnummer"
-          defaultValue={polis?.polisnummer ?? ""}
+          defaultValue={v("polisnummer")}
         />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <TypeSelect defaultValue={polis?.type} />
+        <TypeSelect defaultValue={polis?.type ?? prefill?.type} />
         <Field
           label="Jaarpremie (EUR)"
           name="jaarpremie"
           inputMode="decimal"
-          defaultValue={polis?.jaarpremie ?? ""}
+          defaultValue={v("jaarpremie")}
         />
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -97,25 +109,25 @@ function PolisVelden({ polis }: { polis?: VerzekeringPolis }) {
           label="Ingangsdatum"
           name="ingang_datum"
           type="date"
-          defaultValue={polis?.ingang_datum ?? ""}
+          defaultValue={v("ingang_datum")}
         />
         <Field
           label="Vervaldatum"
           name="vervaldatum"
           type="date"
-          defaultValue={polis?.vervaldatum ?? ""}
+          defaultValue={v("vervaldatum")}
         />
         <Field
           label="Hoofdvervaldag"
           name="hoofdvervaldag"
           placeholder="bv. 1 januari"
-          defaultValue={polis?.hoofdvervaldag ?? ""}
+          defaultValue={v("hoofdvervaldag")}
         />
       </div>
       <Field
         label="Makelaar (optioneel)"
         name="makelaar"
-        defaultValue={polis?.makelaar ?? ""}
+        defaultValue={v("makelaar")}
       />
     </>
   );
@@ -143,6 +155,131 @@ export function CreatePolisForm({
       </div>
       <SubmitButton>Polis toevoegen</SubmitButton>
     </ActionForm>
+  );
+}
+
+const BRON_TEKST: Record<PolisExtract["bron"], string> = {
+  ai: "AI-voorstel — controleer alle velden vóór je opslaat.",
+  bestandsnaam: "Ingevuld op basis van de bestandsnaam — controleer de velden.",
+  geen: "Niets automatisch herkend — vul de velden zelf in.",
+};
+
+/**
+ * Sleep een polis-PDF hierop: het document wordt bewaard + gekoppeld en het
+ * formulier opent (waar mogelijk) voorgevuld. Alles blijft aanpasbaar.
+ */
+export function PolisDropzone({ vmeId }: { vmeId: string }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [pending, start] = useTransition();
+  const [over, setOver] = useState(false);
+  const [resultaat, setResultaat] = useState<{
+    documentId: string;
+    naam: string;
+    extract: PolisExtract;
+  } | null>(null);
+
+  const verwerk = (file: File) => {
+    const fd = new FormData();
+    fd.set("vme_id", vmeId);
+    fd.set("file", file);
+    start(async () => {
+      const r = await verwerkPolisDocument(fd);
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success("Document bewaard — controleer de polisgegevens.");
+      setResultaat({
+        documentId: r.document_id,
+        naam: r.naam,
+        extract: r.extract,
+      });
+    });
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) verwerk(file);
+        }}
+        disabled={pending}
+        className={`flex w-full flex-col items-center gap-1 rounded-lg border-2 border-dashed p-6 text-sm transition-colors ${
+          over ? "border-primary bg-primary/5" : "border-input"
+        } ${pending ? "opacity-60" : "hover:border-primary/60"}`}
+      >
+        <Upload className="size-5 text-muted-foreground" />
+        {pending ? (
+          <span>Bezig met verwerken…</span>
+        ) : (
+          <>
+            <span className="font-medium">
+              Sleep hier een polis (PDF) — of klik om te kiezen
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Het document wordt bewaard en aan de polis gekoppeld.
+            </span>
+          </>
+        )}
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf,image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) verwerk(file);
+          e.target.value = "";
+        }}
+      />
+
+      <Dialog
+        open={resultaat != null}
+        onOpenChange={(o) => !o && setResultaat(null)}
+      >
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Polis uit document</DialogTitle>
+          </DialogHeader>
+          {resultaat && (
+            <ActionForm
+              action={createPolis}
+              hiddenFields={{
+                vme_id: vmeId,
+                document_id: resultaat.documentId,
+              }}
+              onSuccess={() => setResultaat(null)}
+              className="space-y-3"
+            >
+              <p className="rounded-md bg-muted/50 p-2 text-xs">
+                📎 Gekoppeld: {resultaat.naam}
+                <br />
+                {BRON_TEKST[resultaat.extract.bron]}
+              </p>
+              <PolisVelden prefill={resultaat.extract} />
+              <div className="space-y-1.5">
+                <Label htmlFor="drop-opm">Opmerkingen (optioneel)</Label>
+                <Textarea id="drop-opm" name="opmerkingen" rows={2} />
+              </div>
+              <DialogFooter>
+                <SubmitButton>Polis opslaan</SubmitButton>
+              </DialogFooter>
+            </ActionForm>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

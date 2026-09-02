@@ -54,6 +54,19 @@ export const emailjsEnv = {
   },
 };
 
+/**
+ * AI-integratie (server-only). Optioneel: zonder sleutel blijft alles werken,
+ * enkel de automatische extractie van polisgegevens is dan uitgeschakeld.
+ */
+export const aiEnv = {
+  get anthropicKey() {
+    return process.env.ANTHROPIC_API_KEY ?? "";
+  },
+  get configured() {
+    return Boolean(this.anthropicKey);
+  },
+};
+
 /** Alleen aanroepen vanuit server-code (service_role key is server-only). */
 export function serverEnv() {
   return {

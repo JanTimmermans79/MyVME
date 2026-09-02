@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { POLIS_TYPE_LABEL, type VerzekeringPolis } from "@/lib/types";
-import { CreatePolisForm } from "./verzekeringen-forms";
+import { CreatePolisForm, PolisDropzone } from "./verzekeringen-forms";
 
 export const metadata = { title: "Verzekeringen" };
 
@@ -114,7 +114,20 @@ export default async function VerzekeringenPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Polis toevoegen</CardTitle>
+          <CardTitle className="text-base">Polis via document</CardTitle>
+          <CardDescription>
+            Sleep een polis-PDF hierop; het document wordt bewaard en het
+            formulier opent (waar mogelijk) voorgevuld.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PolisDropzone vmeId={vme.id} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Polis handmatig toevoegen</CardTitle>
         </CardHeader>
         <CardContent>
           <CreatePolisForm vmeId={vme.id} documenten={documenten} />

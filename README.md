@@ -47,6 +47,7 @@ npm run dev
 | `NEXT_PUBLIC_EMAILJS_TEMPLATE_ID`  | EmailJS → Email Templates                      |
 | `NEXT_PUBLIC_EMAILJS_PUBLIC_KEY`   | EmailJS → Account → API Keys                   |
 | `NEXT_PUBLIC_SITE_URL`             | `http://localhost:3000` of de productie-URL    |
+| `ANTHROPIC_API_KEY` *(optioneel)* | console.anthropic.com — AI-extractie polisgegevens |
 
 ## Supabase opzetten
 
