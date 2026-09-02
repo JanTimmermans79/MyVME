@@ -15,7 +15,10 @@ export async function GET(request: Request) {
     return new NextResponse("Geen toegang", { status: 403 });
   }
 
-  const id = new URL(request.url).searchParams.get("id");
+  const params = new URL(request.url).searchParams;
+  const id = params.get("id");
+  // inline=1 → geen "attachment"-disposition, zodat de foto in een <img> past.
+  const inline = params.get("inline") === "1";
   if (!id) return new NextResponse("id ontbreekt", { status: 400 });
 
   const supabase = await createClient();
@@ -29,7 +32,7 @@ export async function GET(request: Request) {
   const db = createAdminClient();
   const { data, error } = await db.storage
     .from("documenten")
-    .createSignedUrl(row.pad, 60, { download: row.naam });
+    .createSignedUrl(row.pad, 60, inline ? {} : { download: row.naam });
   if (error || !data)
     return new NextResponse("Document niet gevonden", { status: 404 });
 

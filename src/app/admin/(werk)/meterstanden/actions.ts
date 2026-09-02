@@ -8,9 +8,20 @@ import {
   num,
   type ActionState,
 } from "@/lib/action-helpers";
+import { requireAdmin } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { uploadNaarDocumenten } from "@/lib/documenten-upload";
 import { EENHEIDSPRIJS_DEFAULTS, type TellerType } from "@/lib/types";
 
 const TYPES: TellerType[] = ["koud_water", "warm_water", "cv"];
+
+const AANLEIDINGEN = new Set([
+  "boekjaareinde",
+  "einde_huurder",
+  "start_huurder",
+  "tussentijds",
+  "huurderwissel",
+]);
 
 /** Aanleidingen die aan een specifieke huurder hangen. */
 const HUURDER_AANLEIDINGEN = new Set([
@@ -18,6 +29,23 @@ const HUURDER_AANLEIDINGEN = new Set([
   "start_huurder",
   "huurderwissel",
 ]);
+
+/** Ligt `datum` (paar dagen marge) binnen het boekjaar? */
+function buitenBoekjaar(
+  datum: string,
+  bjStart: string,
+  bjEind: string,
+): string | null {
+  if (!bjStart || !bjEind) return null;
+  const marge = (d: string, dagen: number) => {
+    const t = new Date(`${d}T00:00:00Z`);
+    t.setUTCDate(t.getUTCDate() + dagen);
+    return t.toISOString().slice(0, 10);
+  };
+  if (datum < marge(bjStart, -3) || datum > marge(bjEind, 3))
+    return `Datum valt buiten het boekjaar (${bjStart} – ${bjEind}).`;
+  return null;
+}
 
 export async function maakTellers(
   _prev: ActionState,
@@ -310,5 +338,169 @@ export async function mazoutprijsUitLeveringen(
       ok: true,
       message: `Mazoutprijs ingesteld op € ${rec.mazoutprijs_per_liter.toFixed(4)}/l (gewogen gemiddelde).`,
     };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Meterstand via foto (syndicus-kant)
+// ---------------------------------------------------------------------------
+
+const optDrie = (formData: FormData, key: string): number | null => {
+  const raw = optStr(formData, key);
+  if (raw == null) return null;
+  const n = Number(raw.replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(n) && n >= 0 ? n : null;
+};
+
+export type BewaarMeterfotoResultaat =
+  | { ok: true; opname_id: string; document_id: string }
+  | { ok: false; error: string };
+
+/**
+ * Bewaart een geüploade tellerfoto, koppelt ze aan de VME en zet ze als
+ * `meteropname` (rol 'syndicus', status 'nieuw') in de inbox. Imperatief
+ * aangeroepen vanuit de client — eigen resultaattype i.p.v. ActionState.
+ */
+export async function bewaarMeterfoto(
+  formData: FormData,
+): Promise<BewaarMeterfotoResultaat> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { ok: false, error: "Geen toegang." };
+  }
+  try {
+    const vme_id = str(formData, "vme_id");
+    const unit_id = str(formData, "unit_id");
+    const file = formData.get("file");
+    if (!vme_id || !unit_id || !(file instanceof File) || file.size === 0)
+      return { ok: false, error: "Geen foto ontvangen." };
+    if (!file.type.startsWith("image/"))
+      return { ok: false, error: "Enkel een foto (afbeelding) van de teller." };
+    if (file.size > 8 * 1024 * 1024)
+      return { ok: false, error: "De foto is groter dan 8 MB." };
+
+    const db = createAdminClient();
+    const pad = await uploadNaarDocumenten(db, vme_id, file);
+    const { data: doc, error: docErr } = await db
+      .from("document")
+      .insert({
+        vme_id,
+        boekjaar_id: optStr(formData, "boekjaar_id"),
+        naam: file.name,
+        pad,
+        mimetype: file.type || null,
+        grootte: file.size,
+        categorie: "meterstand",
+      })
+      .select("id")
+      .single();
+    if (docErr) return { ok: false, error: docErr.message };
+
+    const herkende_waarde = optDrie(formData, "herkende_waarde");
+    const { data: opname, error } = await db
+      .from("meteropname")
+      .insert({
+        vme_id,
+        unit_id,
+        teller_id: optStr(formData, "teller_id"),
+        boekjaar_id: optStr(formData, "boekjaar_id"),
+        document_id: doc.id as string,
+        rol: "syndicus",
+        opname_datum: optStr(formData, "opname_datum"),
+        herkende_waarde,
+        herkend_meternummer: optStr(formData, "herkend_meternummer"),
+        waarde: herkende_waarde,
+        status: "nieuw",
+      })
+      .select("id")
+      .single();
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath("/admin/meterstanden");
+    revalidatePath("/admin/documenten");
+    return {
+      ok: true,
+      opname_id: opname.id as string,
+      document_id: doc.id as string,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Onbekende fout.",
+    };
+  }
+}
+
+/** Bevestigt een foto-opname → maakt er een echte `meterstand` van. */
+export async function bevestigMeteropname(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAdmin(async (db) => {
+    const opname_id = str(formData, "opname_id");
+    const teller_id = str(formData, "teller_id");
+    const datum = str(formData, "datum");
+    const aanleiding = str(formData, "aanleiding") || "boekjaareinde";
+    const huurder_id = HUURDER_AANLEIDINGEN.has(aanleiding)
+      ? optStr(formData, "huurder_id")
+      : null;
+    if (!opname_id || !teller_id || !datum)
+      return { ok: false, error: "Teller en datum zijn verplicht." };
+    if (!AANLEIDINGEN.has(aanleiding))
+      return { ok: false, error: "Ongeldige aanleiding." };
+    if (HUURDER_AANLEIDINGEN.has(aanleiding) && !huurder_id)
+      return { ok: false, error: "Kies de huurder bij een einde-/startstand." };
+
+    const bjFout = buitenBoekjaar(
+      datum,
+      str(formData, "boekjaar_start"),
+      str(formData, "boekjaar_eind"),
+    );
+    if (bjFout) return { ok: false, error: bjFout };
+
+    const waarde = num(formData, "waarde");
+    if (waarde < 0)
+      return { ok: false, error: "Meterstand mag niet negatief zijn." };
+
+    const { data: stand, error } = await db
+      .from("meterstand")
+      .insert({ teller_id, datum, waarde, aanleiding, huurder_id })
+      .select("id")
+      .single();
+    if (error) return { ok: false, error: error.message };
+
+    const { error: updErr } = await db
+      .from("meteropname")
+      .update({
+        status: "verwerkt",
+        meterstand_id: stand.id as string,
+        teller_id,
+        waarde,
+        opname_datum: datum,
+      })
+      .eq("id", opname_id);
+    if (updErr) return { ok: false, error: updErr.message };
+
+    revalidatePath("/admin/meterstanden");
+    return { ok: true, message: "Meterstand opgeslagen." };
+  });
+}
+
+/** Wijst een foto-opname af (wordt geen meterstand). */
+export async function wijsMeteropnameAf(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAdmin(async (db) => {
+    const opname_id = str(formData, "opname_id");
+    if (!opname_id) return { ok: false, error: "Geen opname." };
+    const { error } = await db
+      .from("meteropname")
+      .update({ status: "afgewezen", opmerking: optStr(formData, "opmerking") })
+      .eq("id", opname_id);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/admin/meterstanden");
+    return { ok: true, message: "Foto-opname afgewezen." };
   });
 }

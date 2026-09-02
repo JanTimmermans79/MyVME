@@ -7,6 +7,11 @@ const NAV: NavGroup[] = [
   {
     items: [
       { href: "/dashboard", label: "Mijn overzicht", icon: "dashboard" },
+      {
+        href: "/dashboard/meterstanden",
+        label: "Meterstanden",
+        icon: "meterstanden",
+      },
       { href: "/dashboard/contact", label: "Contactgegevens", icon: "contact" },
     ],
   },

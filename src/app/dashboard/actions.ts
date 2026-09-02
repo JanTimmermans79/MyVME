@@ -7,6 +7,11 @@ import {
   optStr,
   type ActionState,
 } from "@/lib/action-helpers";
+import { requireUser } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { uploadNaarDocumenten } from "@/lib/documenten-upload";
+import { getActiveContext } from "@/lib/vme-context";
 
 export async function updateEigenContact(
   _prev: ActionState,
@@ -80,4 +85,103 @@ export async function deleteHuurder(
     revalidatePath("/dashboard/contact");
     return { ok: true, message: "Huurder verwijderd." };
   });
+}
+
+export type DienMeteropnameResultaat =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Een eigenaar dient een tellerfoto in voor zijn eigen appartement. De opname
+ * belandt als `meteropname` (rol 'eigenaar', status 'nieuw') in de inbox van de
+ * syndicus en wordt pas een echte `meterstand` na diens bevestiging.
+ *
+ * De storage-upload + `document`-rij vereisen de admin-client (bucket/tabel zijn
+ * admin-only schrijfbaar); de eigendomscontrole gebeurt eerst met de RLS-client.
+ */
+export async function dienMeteropnameIn(
+  formData: FormData,
+): Promise<DienMeteropnameResultaat> {
+  let userId: string;
+  try {
+    userId = (await requireUser()).userId;
+  } catch {
+    return { ok: false, error: "Niet ingelogd." };
+  }
+  try {
+    const unit_id = str(formData, "unit_id");
+    const file = formData.get("file");
+    if (!unit_id || !(file instanceof File) || file.size === 0)
+      return { ok: false, error: "Geen foto ontvangen." };
+    if (!file.type.startsWith("image/"))
+      return { ok: false, error: "Enkel een foto (afbeelding) van de teller." };
+    if (file.size > 8 * 1024 * 1024)
+      return { ok: false, error: "De foto is groter dan 8 MB." };
+
+    // Eigendomscontrole via RLS: alleen eigen eigenaar-records zijn zichtbaar.
+    const rls = await createClient();
+    const { data: eigen } = await rls
+      .from("eigenaar")
+      .select("id")
+      .eq("unit_id", unit_id)
+      .limit(1);
+    if (!eigen || eigen.length === 0)
+      return { ok: false, error: "Dit appartement is niet van jou." };
+
+    const { data: unit } = await rls
+      .from("unit")
+      .select("vme_id")
+      .eq("id", unit_id)
+      .maybeSingle<{ vme_id: string }>();
+    if (!unit) return { ok: false, error: "Appartement niet gevonden." };
+
+    const { boekjaar } = await getActiveContext();
+
+    const db = createAdminClient();
+    const pad = await uploadNaarDocumenten(db, unit.vme_id, file);
+    const { data: doc, error: docErr } = await db
+      .from("document")
+      .insert({
+        vme_id: unit.vme_id,
+        boekjaar_id: boekjaar?.id ?? null,
+        naam: file.name,
+        pad,
+        mimetype: file.type || null,
+        grootte: file.size,
+        categorie: "meterstand",
+      })
+      .select("id")
+      .single();
+    if (docErr) return { ok: false, error: docErr.message };
+
+    const raw = optStr(formData, "herkende_waarde");
+    const herkende_waarde =
+      raw != null && Number.isFinite(Number(raw.replace(",", ".")))
+        ? Number(raw.replace(",", "."))
+        : null;
+
+    const { error } = await db.from("meteropname").insert({
+      vme_id: unit.vme_id,
+      unit_id,
+      teller_id: optStr(formData, "teller_id"),
+      boekjaar_id: boekjaar?.id ?? null,
+      document_id: doc.id as string,
+      ingediend_door: userId,
+      rol: "eigenaar",
+      opname_datum: optStr(formData, "opname_datum"),
+      herkende_waarde,
+      herkend_meternummer: optStr(formData, "herkend_meternummer"),
+      waarde: herkende_waarde,
+      status: "nieuw",
+    });
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath("/dashboard/meterstanden");
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Onbekende fout.",
+    };
+  }
 }
