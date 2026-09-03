@@ -316,6 +316,43 @@ export interface Meterstand {
   created_at: string;
 }
 
+/** Compacte huurderinfo voor het eigenaarsoverzicht. */
+export interface HuurderInfo {
+  id: string;
+  naam: string;
+  ingang_datum: string | null;
+  uitgang_datum: string | null;
+}
+
+export type MeteropnameStatus = "nieuw" | "verwerkt" | "afgewezen";
+export type MeteropnameRol = "syndicus" | "eigenaar";
+
+export const METEROPNAME_STATUS_LABEL: Record<MeteropnameStatus, string> = {
+  nieuw: "In te dienen / na te kijken",
+  verwerkt: "Verwerkt",
+  afgewezen: "Afgewezen",
+};
+
+/** Ingediende tellerfoto (syndicus of eigenaar) met OCR-voorstel. */
+export interface Meteropname {
+  id: string;
+  vme_id: string;
+  unit_id: string;
+  teller_id: string | null;
+  boekjaar_id: string | null;
+  document_id: string | null;
+  ingediend_door: string | null;
+  rol: MeteropnameRol;
+  opname_datum: string | null;
+  herkende_waarde: number | null;
+  herkend_meternummer: string | null;
+  waarde: number | null;
+  status: MeteropnameStatus;
+  meterstand_id: string | null;
+  opmerking: string | null;
+  created_at: string;
+}
+
 export interface Eenheidsprijs {
   id: string;
   vme_id: string;

@@ -107,7 +107,7 @@ cijfers. Elke sub-/detailpagina heeft een **← Terug**-knop.
 | ↳ Voorschotcontrole | `.../voorschotcontrole` | Per huurder/eigenaar: verwacht (pro rata op maandbasis) vs. betaald vs. verschil vs. status. |
 | ↳ transactie-detail | `/admin/financien/transactie/[id]` | Tegenpartij + IBAN, mededeling, categorie, betaler, verdeling, boekjaar (automatisch/expliciet), match-status; gekoppelde kost + document; acties om alles te corrigeren. |
 | **Voorschotten** | `/admin/voorschotten` | De *opgelegde* maandvoorschotten beheren. Tabs Huurders / Eigenaars, inline bewerkbaar, "overnemen van vorig boekjaar". |
-| **Meterstanden** | `/admin/meterstanden` | Eén kaart per appartement: begin → eind → Δ m³ → kost; standenlijst (klik = bewerken); "op schema"-controle (geëxtrapoleerde jaarkost vs. jaarvoorschot); onderaan **Eenheidsprijzen** per boekjaar + knop "Mazoutprijs uit leveringen". |
+| **Meterstanden** | `/admin/meterstanden` | Eén kaart per appartement: begin → eind → Δ m³ → kost; standenlijst (klik = bewerken); "op schema"-controle (geëxtrapoleerde jaarkost vs. jaarvoorschot); **foto van een teller toevoegen** (EXIF-datum + lokale OCR-voorstel); kaart **"Foto-opnames"** met ingediende foto's om te bevestigen; onderaan **Eenheidsprijzen** per boekjaar + knop "Mazoutprijs uit leveringen". |
 | **Afrekeningen** | `/admin/afrekeningen` | Kern. Overzicht huurders + eigenaars, "(her)berekenen", waarschuwingenlijst, banner "tussentijds" bij een open boekjaar. |
 | ↳ huurder | `/admin/afrekeningen/huurder/[id]` | Volledige afrekening: voorschotten, koud/warm water, stookolie, aandeel gedeelde kosten, administratie%, totaal, saldo. Elke regel klikbaar. Mailen via EmailJS. |
 | ↳ eigenaar | `/admin/afrekeningen/eigenaar/[id]` | Aandeel eigenaarskosten via verdeelsleutel + reservefondsprovisies + kapitaalsoproepen + saldo. |
@@ -116,7 +116,19 @@ cijfers. Elke sub-/detailpagina heeft een **← Terug**-knop.
 | **Instellingen** | `/admin/instellingen` | Kaart-hub. VME-gegevens, Boekjaren, Appartementen, Eigenaars, Huurders, Leveranciers, Categorieën, Verdeelsleutels, Mazout. |
 | ↳ VME-gegevens | `/admin/vme` | Overzicht + bewerken: naam, adres (werking), IBAN zicht/spaar, aantal kavels, en de optionele **KBO-/juridische gegevens** (zie §6). |
 
-**Eigenaarskant:** `/dashboard` (eigen VME-overzicht) en `/dashboard/contact`.
+**Eigenaarskant:**
+- `/dashboard` — per eigen appartement: **huidige huurder** (naam + sinds) met
+  een uitklap "Vorige huurders (N)", en de jaarafrekening (eigenaar + huurder).
+- `/dashboard/meterstanden` — **verbruiksgrafiek** over de boekjaren (water m³/€,
+  stookolie €, totaal; per appartement of samen), per appartement de tellers,
+  de geregistreerde meterstanden, de eigen ingediende opnames + status, het
+  verbruik en de afrekening. **Meterstand toevoegen** met een foto óf handmatig
+  (teller + datum + waarde) → belandt in de syndicus-inbox, wordt pas een
+  officiële `meterstand` na bevestiging.
+- `/dashboard/contact` — eigen contactgegevens + huurderfiches beheren.
+
+Gedeelde datalaag: `src/lib/eigenaar-overzicht.ts` (`eigenaarOverzicht`), grafiek
+`src/components/verbruik-grafiek.tsx` (+ gedeelde `lijn-grafiek.tsx`).
 
 ---
 
@@ -246,6 +258,13 @@ warmwater_liter_per_m3, administratie_pct numeric(6,3) (0–100)`.
 Defaults in de code: water 6,51 €/m³ · mazout 0,81 €/l · CV 0,20 l/m³ · warm water
 1,0 l/m³ · administratie 0 %.
 
+**`meteropname`** — ingediende tellerfoto met OCR-voorstel; staging vóór een
+`meterstand`. `vme_id, unit_id, teller_id (nullable), boekjaar_id, document_id
+(de foto), ingediend_door (auth uid), rol ∈ {syndicus, eigenaar}, opname_datum
+(EXIF), herkende_waarde, herkend_meternummer, waarde, status ∈ {nieuw, verwerkt,
+afgewezen}, meterstand_id (bij bevestiging), opmerking`. RLS: admin alles;
+eigenaar select/insert enkel voor een eigen unit (rol = 'eigenaar').
+
 ### 6.5 Afrekening
 
 **`afrekening`** — kop per (boekjaar, unit, betaler_type) — uniek.
@@ -337,6 +356,27 @@ Voor het **overzicht** (`tellerOverzicht`, per appartement, huidige huurder):
 Voor de **afrekening** (`meterDelta`): idem, maar per huurder en pro rata zijn
 bewoningsperiode. Matcht `einde_huurder`/`start_huurder` **op naam** (huurder_id),
 niet op datum. Terugval op een oude, niet-gesplitste `huurderwissel`-stand.
+
+**Meterstand via foto** (`meteropname`-tabel):
+
+- Zowel de **syndicus** (`/admin/meterstanden`) als de **eigenaar** voor zijn
+  eigen appartement (`/dashboard/meterstanden`) kan een tellerfoto uploaden of
+  met de gsm nemen.
+- In de browser: EXIF geeft de **opnamedatum**, lokale OCR (`tesseract.js`, geen
+  API-kosten) geeft een *voorstel* voor **waarde + meternummer**; het meternummer
+  wordt aan een `teller` gematcht. OCR van tellers is onbetrouwbaar → alles is
+  **manueel corrigeerbaar** naast de foto vóór verzending
+  (`src/lib/meterfoto-client.ts`, `src/components/meterfoto-upload.tsx`).
+- De foto wordt bewaard als `document` (categorie `meterstand`) en de opname komt
+  als `meteropname` (status `nieuw`) in de kaart **"Foto-opnames"** bij de
+  syndicus. Die bevestigt ze (teller / datum / aanleiding / waarde) → er wordt
+  een echte `meterstand` gemaakt; of wijst ze af. Een **eigenaarsopname wordt
+  dus nooit vanzelf een `meterstand`** — de syndicus bevestigt altijd.
+- De eigenaar ziet op zijn pagina zijn tellers, de status van zijn opnames en
+  zijn verbruik/afrekening voor het boekjaar (bij een verhuurd appartement met
+  de melding dat het verbruik met de huurder wordt afgerekend).
+- `tesseract.js` haalt zijn worker/wasm/taalbestand van een CDN; bij een latere
+  CSP moeten die assets self-hosted worden (`/public/tesseract`).
 
 ### 7.6 Eenheidsprijzen & stookolieformule
 

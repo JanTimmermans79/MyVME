@@ -21,7 +21,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Eenheidsprijs, Huurder, Teller, Unit } from "@/lib/types";
+import type {
+  Eenheidsprijs,
+  Huurder,
+  Meteropname,
+  Teller,
+  Unit,
+} from "@/lib/types";
 import {
   EditMeterstandGroep,
   EenheidsprijsForm,
@@ -29,6 +35,8 @@ import {
   MeternummerRij,
   NieuweMeterstandDialog,
 } from "./tellers-client";
+import { MeteropnameInbox, type InboxItem } from "./meteropname-inbox";
+import { MeterfotoUpload } from "@/components/meterfoto-upload";
 
 export const metadata = { title: "Meterstanden" };
 
@@ -68,6 +76,16 @@ export default async function TellersPage() {
 
   const overzicht = await tellerOverzicht(createAdminClient(), active.id, boekjaar);
 
+  const { data: opnameRows, error: opnameErr } = await supabase
+    .from("meteropname")
+    .select("*")
+    .eq("vme_id", active.id)
+    .eq("status", "nieuw")
+    .order("created_at", { ascending: false })
+    .returns<Meteropname[]>();
+  const opnameMigratieNodig =
+    opnameErr?.message?.toLowerCase().includes("meteropname") ?? false;
+
   const tellersByUnit = new Map<string, Teller[]>();
   for (const t of tellers ?? []) {
     const l = tellersByUnit.get(t.unit_id) ?? [];
@@ -81,6 +99,24 @@ export default async function TellersPage() {
     huurdersByUnit.set(h.unit_id, l);
   }
   const meternrByTeller = new Map((tellers ?? []).map((t) => [`${t.unit_id}|${t.type}`, t]));
+
+  const unitNaamById = new Map((units ?? []).map((u) => [u.id, u.naam]));
+  const inboxItems: InboxItem[] = (opnameRows ?? []).map((o) => ({
+    opname: o,
+    unitNaam: unitNaamById.get(o.unit_id) ?? "Onbekend appartement",
+    tellers: (tellersByUnit.get(o.unit_id) ?? []).map((t) => ({
+      id: t.id,
+      type: t.type,
+      meternummer: t.meternummer,
+    })),
+    huurders: (huurdersByUnit.get(o.unit_id) ?? []).map((h) => ({
+      id: h.id,
+      naam: [h.voornaam, h.naam].filter(Boolean).join(" "),
+    })),
+    fotoUrl: o.document_id
+      ? `/admin/documenten/download?id=${o.document_id}&inline=1`
+      : null,
+  }));
 
   return (
     <div className="space-y-5">
@@ -98,6 +134,21 @@ export default async function TellersPage() {
           overzicht, niet voor de jaarafrekening.
         </p>
       </div>
+
+      {opnameMigratieNodig && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          De tabel voor foto-opnames bestaat nog niet. Draai migratie{" "}
+          <code>20260903100000_meteropname.sql</code> in de Supabase SQL Editor.
+        </div>
+      )}
+
+      {inboxItems.length > 0 && (
+        <MeteropnameInbox
+          items={inboxItems}
+          boekjaarStart={boekjaar.start_datum}
+          boekjaarEind={boekjaar.eind_datum}
+        />
+      )}
 
       {(units ?? []).length === 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -142,6 +193,20 @@ export default async function TellersPage() {
 
               {heeftTellers && (
                 <CardContent className="space-y-3">
+                  {!opnameMigratieNodig && (
+                    <MeterfotoUpload
+                      rol="syndicus"
+                      vmeId={active.id}
+                      unitId={u.unit_id}
+                      unitNaam={u.unit_naam}
+                      boekjaarId={boekjaar.id}
+                      tellers={ut.map((t) => ({
+                        id: t.id,
+                        type: t.type,
+                        meternummer: t.meternummer,
+                      }))}
+                    />
+                  )}
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
