@@ -316,6 +316,14 @@ export interface Meterstand {
   created_at: string;
 }
 
+/** Compacte huurderinfo voor het eigenaarsoverzicht. */
+export interface HuurderInfo {
+  id: string;
+  naam: string;
+  ingang_datum: string | null;
+  uitgang_datum: string | null;
+}
+
 export type MeteropnameStatus = "nieuw" | "verwerkt" | "afgewezen";
 export type MeteropnameRol = "syndicus" | "eigenaar";
 

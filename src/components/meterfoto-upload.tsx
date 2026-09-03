@@ -19,6 +19,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -281,5 +282,127 @@ export function MeterfotoUpload({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/**
+ * Meterstand handmatig ingeven (geen foto). Eigenaarskant — de opname belandt
+ * ook in de inbox van de syndicus en wordt pas een echte meterstand na
+ * bevestiging.
+ */
+export function ManueleOpnameDialog({
+  unitId,
+  unitNaam,
+  vmeId,
+  boekjaarId,
+  tellers,
+}: {
+  unitId: string;
+  unitNaam: string;
+  vmeId: string;
+  boekjaarId?: string;
+  tellers: TellerKeuze[];
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [verzendt, start] = useTransition();
+  const [tellerId, setTellerId] = useState(
+    tellers.length === 1 ? tellers[0].id : "",
+  );
+  const [datum, setDatum] = useState(new Date().toISOString().slice(0, 10));
+  const [waarde, setWaarde] = useState("");
+
+  const verzend = () => {
+    if (!tellerId) return toast.error("Kies de teller.");
+    if (!datum) return toast.error("Vul de datum in.");
+    if (!waarde.trim()) return toast.error("Vul de meterstand in.");
+    const fd = new FormData();
+    fd.set("vme_id", vmeId);
+    fd.set("unit_id", unitId);
+    if (boekjaarId) fd.set("boekjaar_id", boekjaarId);
+    fd.set("teller_id", tellerId);
+    fd.set("opname_datum", datum);
+    fd.set("herkende_waarde", waarde.trim());
+    start(async () => {
+      const r = await dienMeteropnameIn(fd);
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success("Ingediend. De syndicus bevestigt je opname.");
+      setOpen(false);
+      setWaarde("");
+      router.refresh();
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button type="button" variant="outline">
+          Handmatig invoeren
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Meterstand invoeren — {unitNaam}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>Teller</Label>
+            <Select value={tellerId} onValueChange={setTellerId}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="(kies teller)" />
+              </SelectTrigger>
+              <SelectContent>
+                {tellers.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {TYPE_LABEL[t.type] ?? t.type}
+                    {t.meternummer ? ` · nr. ${t.meternummer}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="mo-datum">Datum</Label>
+              <Input
+                id="mo-datum"
+                type="date"
+                value={datum}
+                onChange={(e) => setDatum(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="mo-waarde">Meterstand (m³)</Label>
+              <Input
+                id="mo-waarde"
+                inputMode="decimal"
+                value={waarde}
+                onChange={(e) => setWaarde(e.target.value)}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Je opname wordt pas een officiële meterstand nadat de syndicus ze
+            nakijkt.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setOpen(false)}
+            disabled={verzendt}
+          >
+            Annuleren
+          </Button>
+          <Button type="button" onClick={verzend} disabled={verzendt}>
+            {verzendt ? "Bezig…" : "Indienen"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

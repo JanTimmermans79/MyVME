@@ -116,9 +116,19 @@ cijfers. Elke sub-/detailpagina heeft een **← Terug**-knop.
 | **Instellingen** | `/admin/instellingen` | Kaart-hub. VME-gegevens, Boekjaren, Appartementen, Eigenaars, Huurders, Leveranciers, Categorieën, Verdeelsleutels, Mazout. |
 | ↳ VME-gegevens | `/admin/vme` | Overzicht + bewerken: naam, adres (werking), IBAN zicht/spaar, aantal kavels, en de optionele **KBO-/juridische gegevens** (zie §6). |
 
-**Eigenaarskant:** `/dashboard` (eigen VME-overzicht), `/dashboard/meterstanden`
-(tellers + tellerfoto indienen + eigen verbruik/afrekening) en
-`/dashboard/contact`.
+**Eigenaarskant:**
+- `/dashboard` — per eigen appartement: **huidige huurder** (naam + sinds) met
+  een uitklap "Vorige huurders (N)", en de jaarafrekening (eigenaar + huurder).
+- `/dashboard/meterstanden` — **verbruiksgrafiek** over de boekjaren (water m³/€,
+  stookolie €, totaal; per appartement of samen), per appartement de tellers,
+  de geregistreerde meterstanden, de eigen ingediende opnames + status, het
+  verbruik en de afrekening. **Meterstand toevoegen** met een foto óf handmatig
+  (teller + datum + waarde) → belandt in de syndicus-inbox, wordt pas een
+  officiële `meterstand` na bevestiging.
+- `/dashboard/contact` — eigen contactgegevens + huurderfiches beheren.
+
+Gedeelde datalaag: `src/lib/eigenaar-overzicht.ts` (`eigenaarOverzicht`), grafiek
+`src/components/verbruik-grafiek.tsx` (+ gedeelde `lijn-grafiek.tsx`).
 
 ---
 

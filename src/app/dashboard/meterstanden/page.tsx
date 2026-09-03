@@ -1,10 +1,8 @@
-import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { getActiveContext } from "@/lib/vme-context";
 import { datum, euro } from "@/lib/format";
-import { tellerOverzicht } from "@/lib/verbruik";
-import { MeterfotoUpload } from "@/components/meterfoto-upload";
+import { eigenaarOverzicht } from "@/lib/eigenaar-overzicht";
+import { MeterfotoUpload, ManueleOpnameDialog } from "@/components/meterfoto-upload";
+import { VerbruikGrafiek } from "@/components/verbruik-grafiek";
 import {
   Card,
   CardContent,
@@ -21,125 +19,56 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import {
-  METEROPNAME_STATUS_LABEL,
-  type Afrekening,
-  type AfrekeningLijn,
-  type Eigenaar,
-  type Huurder,
-  type Meteropname,
-  type Teller,
-  type Unit,
-} from "@/lib/types";
+import { METEROPNAME_STATUS_LABEL, type Meteropname } from "@/lib/types";
 
 export const metadata = { title: "Meterstanden" };
 
-const vandaag = () => new Date().toISOString().slice(0, 10);
+const TYPE_LABEL: Record<string, string> = {
+  koud_water: "Koud water",
+  warm_water: "Warm water",
+  cv: "CV / verwarming",
+};
+const AANLEIDING_LABEL: Record<string, string> = {
+  boekjaareinde: "Einde boekjaar",
+  einde_huurder: "Einde huurder",
+  start_huurder: "Start nieuwe huurder",
+  tussentijds: "Tussentijds",
+  huurderwissel: "Huurderwissel",
+};
 
 export default async function EigenaarMeterstandenPage() {
-  await requireUser();
-  const supabase = await createClient();
-  const { vme, boekjaar } = await getActiveContext();
+  const data = await eigenaarOverzicht(true);
 
-  const { data: eigenaars } = await supabase
-    .from("eigenaar")
-    .select("*")
-    .returns<Eigenaar[]>();
-
-  if (!vme || !eigenaars || eigenaars.length === 0) {
+  if (data.leeg) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Nog niet gekoppeld</CardTitle>
+          <CardTitle>
+            {data.leeg === "geen-vme" ? "Geen VME" : "Nog niet gekoppeld"}
+          </CardTitle>
           <CardDescription>
-            Je account is nog niet aan een wooneenheid gekoppeld. Neem contact op
-            met de syndicus.
+            {data.leeg === "geen-vme"
+              ? "Er is geen VME beschikbaar voor je account."
+              : "Je account is nog niet aan een wooneenheid gekoppeld. Neem contact op met de syndicus."}
           </CardDescription>
         </CardHeader>
       </Card>
     );
   }
 
-  const { data: units } = await supabase
-    .from("unit")
+  const { vme, boekjaar, units, verbruik5 } = data;
+  const mijnUnitIds = units.map((u) => u.unit.id);
+
+  // Foto-/handmatige opnames van de eigenaar (+ migratiedetectie).
+  const supabase = await createClient();
+  const { data: opnameRows, error: opnameErr } = await supabase
+    .from("meteropname")
     .select("*")
-    .eq("vme_id", vme.id)
-    .returns<Unit[]>();
-  const unitById = new Map((units ?? []).map((u) => [u.id, u]));
-  const mijnUnitIds = [
-    ...new Set(
-      eigenaars.map((e) => e.unit_id).filter((id) => unitById.has(id)),
-    ),
-  ];
-
-  if (mijnUnitIds.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Geen appartement in deze VME</CardTitle>
-        </CardHeader>
-      </Card>
-    );
-  }
-
-  const [
-    { data: tellers },
-    { data: opnameRows, error: opnameErr },
-    { data: huurders },
-  ] = await Promise.all([
-    supabase.from("teller").select("*").in("unit_id", mijnUnitIds).returns<Teller[]>(),
-    supabase
-      .from("meteropname")
-      .select("*")
-      .in("unit_id", mijnUnitIds)
-      .order("created_at", { ascending: false })
-      .returns<Meteropname[]>(),
-    supabase.from("huurder").select("*").in("unit_id", mijnUnitIds).returns<Huurder[]>(),
-  ]);
+    .in("unit_id", mijnUnitIds)
+    .order("created_at", { ascending: false })
+    .returns<Meteropname[]>();
   const opnameMigratieNodig =
     opnameErr?.message?.toLowerCase().includes("meteropname") ?? false;
-
-  const overzicht = boekjaar
-    ? await tellerOverzicht(createAdminClient(), vme.id, boekjaar)
-    : [];
-
-  let afrekeningen: Afrekening[] = [];
-  let lijnen: AfrekeningLijn[] = [];
-  if (boekjaar) {
-    const { data: afr } = await supabase
-      .from("afrekening")
-      .select("*")
-      .eq("boekjaar_id", boekjaar.id)
-      .in("unit_id", mijnUnitIds)
-      .returns<Afrekening[]>();
-    afrekeningen = afr ?? [];
-    if (afrekeningen.length) {
-      const { data: lj } = await supabase
-        .from("afrekening_lijn")
-        .select("*")
-        .in(
-          "afrekening_id",
-          afrekeningen.map((a) => a.id),
-        )
-        .returns<AfrekeningLijn[]>();
-      lijnen = lj ?? [];
-    }
-  }
-
-  const tellersByUnit = new Map<string, Teller[]>();
-  for (const t of tellers ?? []) {
-    const l = tellersByUnit.get(t.unit_id) ?? [];
-    l.push(t);
-    tellersByUnit.set(t.unit_id, l);
-  }
-  const nu = vandaag();
-  const actieveHuurderVoor = (unitId: string) =>
-    (huurders ?? []).find(
-      (h) =>
-        h.unit_id === unitId &&
-        (h.ingang_datum ?? "0000-01-01") <= nu &&
-        (h.uitgang_datum ?? "9999-12-31") >= nu,
-    ) ?? null;
 
   return (
     <div className="space-y-6">
@@ -151,50 +80,69 @@ export default async function EigenaarMeterstandenPage() {
                 boekjaar.eind_datum,
               )}.`
             : "Kies een boekjaar in de balk bovenaan."}{" "}
-          Neem een foto van je teller; de syndicus bevestigt je opname.
+          Voeg een meterstand toe met een foto of handmatig; de syndicus bevestigt
+          ze.
         </p>
       </div>
 
       {opnameMigratieNodig && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-          De foto-opnamefunctie is nog niet geactiveerd. Neem contact op met de
-          syndicus.
+          De functie om zelf meterstanden in te dienen is nog niet geactiveerd.
+          Neem contact op met de syndicus.
         </div>
       )}
 
-      {mijnUnitIds.map((unitId) => {
-        const unit = unitById.get(unitId)!;
-        const ut = tellersByUnit.get(unitId) ?? [];
-        const mijnOpnames = (opnameRows ?? []).filter(
-          (o) => o.unit_id === unitId,
+      {verbruik5 && verbruik5.boekjaren.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Verbruik over de jaren</CardTitle>
+            <CardDescription>
+              Water en stookolie per appartement, per boekjaar.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VerbruikGrafiek verbruik={verbruik5} />
+          </CardContent>
+        </Card>
+      )}
+
+      {units.map((u) => {
+        const opnames = (opnameRows ?? []).filter(
+          (o) => o.unit_id === u.unit.id,
         );
-        const verbruik = overzicht.find((u) => u.unit_id === unitId) ?? null;
-        const huurder = actieveHuurderVoor(unitId);
-        const afr = afrekeningen.filter((a) => a.unit_id === unitId);
+        const standenByTeller = new Map<string, typeof u.standen>();
+        for (const s of u.standen) {
+          const l = standenByTeller.get(s.teller_id) ?? [];
+          l.push(s);
+          standenByTeller.set(s.teller_id, l);
+        }
 
         return (
-          <Card key={unitId}>
+          <Card key={u.unit.id}>
             <CardHeader>
-              <CardTitle>{unit.naam}</CardTitle>
-              {huurder && (
-                <CardDescription>
-                  Er woont een huurder in dit appartement — het verbruik wordt
-                  met de huurder afgerekend, niet met jou.
-                </CardDescription>
-              )}
+              <CardTitle>{u.unit.naam}</CardTitle>
+              <CardDescription>
+                Huidige huurder:{" "}
+                {u.huidigeHuurder
+                  ? u.huidigeHuurder.naam
+                  : "geen (je bewoont het zelf of het staat leeg)"}
+                {u.huidigeHuurder && (
+                  <> — het verbruik wordt met de huurder afgerekend, niet met jou.</>
+                )}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               {/* Tellers */}
               <section>
                 <h3 className="mb-2 text-sm font-medium">Je tellers</h3>
-                {ut.length === 0 ? (
+                {u.tellers.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     Nog geen tellers geregistreerd. Vraag de syndicus ze aan te
                     maken.
                   </p>
                 ) : (
                   <ul className="text-sm text-muted-foreground">
-                    {ut
+                    {u.tellers
                       .slice()
                       .sort((a, b) => a.type.localeCompare(b.type))
                       .map((t) => (
@@ -207,31 +155,34 @@ export default async function EigenaarMeterstandenPage() {
                 )}
               </section>
 
-              {/* Foto indienen */}
-              {!opnameMigratieNodig && ut.length > 0 && (
-                <section>
-                  <h3 className="mb-2 text-sm font-medium">Foto indienen</h3>
+              {/* Meterstand toevoegen */}
+              {u.tellers.length > 0 && !opnameMigratieNodig && (
+                <section className="space-y-3">
+                  <h3 className="text-sm font-medium">Meterstand toevoegen</h3>
                   <MeterfotoUpload
                     rol="eigenaar"
                     vmeId={vme.id}
-                    unitId={unitId}
-                    unitNaam={unit.naam}
+                    unitId={u.unit.id}
+                    unitNaam={u.unit.naam}
                     boekjaarId={boekjaar?.id}
-                    tellers={ut.map((t) => ({
-                      id: t.id,
-                      type: t.type,
-                      meternummer: t.meternummer,
-                    }))}
+                    tellers={u.tellers}
+                  />
+                  <ManueleOpnameDialog
+                    vmeId={vme.id}
+                    unitId={u.unit.id}
+                    unitNaam={u.unit.naam}
+                    boekjaarId={boekjaar?.id}
+                    tellers={u.tellers}
                   />
                 </section>
               )}
 
               {/* Mijn opnames */}
-              {mijnOpnames.length > 0 && (
+              {opnames.length > 0 && (
                 <section>
                   <h3 className="mb-2 text-sm font-medium">Mijn opnames</h3>
                   <ul className="space-y-1 text-sm">
-                    {mijnOpnames.map((o) => (
+                    {opnames.map((o) => (
                       <li
                         key={o.id}
                         className="flex flex-wrap items-center gap-2"
@@ -264,8 +215,54 @@ export default async function EigenaarMeterstandenPage() {
                 </section>
               )}
 
+              {/* Meterstanden-historiek */}
+              {u.standen.length > 0 && (
+                <section>
+                  <h3 className="mb-2 text-sm font-medium">
+                    Geregistreerde meterstanden
+                  </h3>
+                  <div className="space-y-3">
+                    {u.tellers
+                      .slice()
+                      .sort((a, b) => a.type.localeCompare(b.type))
+                      .map((t) => {
+                        const rijen = (standenByTeller.get(t.id) ?? []).slice(
+                          0,
+                          6,
+                        );
+                        if (rijen.length === 0) return null;
+                        return (
+                          <div key={t.id}>
+                            <p className="text-xs font-medium text-muted-foreground">
+                              {TYPE_LABEL[t.type] ?? t.type}
+                            </p>
+                            <Table>
+                              <TableBody>
+                                {rijen.map((s, i) => (
+                                  <TableRow key={`${s.datum}-${i}`}>
+                                    <TableCell className="py-1 text-xs">
+                                      {datum(s.datum)}
+                                    </TableCell>
+                                    <TableCell className="py-1 text-right text-xs tabular-nums">
+                                      {s.waarde} m³
+                                    </TableCell>
+                                    <TableCell className="py-1 text-xs text-muted-foreground">
+                                      {AANLEIDING_LABEL[s.aanleiding] ??
+                                        s.aanleiding}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </section>
+              )}
+
               {/* Verbruik dit boekjaar */}
-              {verbruik && (
+              {u.verbruik && (
                 <section>
                   <h3 className="mb-2 text-sm font-medium">
                     Verbruik dit boekjaar
@@ -281,7 +278,7 @@ export default async function EigenaarMeterstandenPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {verbruik.regels.map((r) => (
+                      {u.verbruik.regels.map((r) => (
                         <TableRow key={r.type}>
                           <TableCell>{r.label}</TableCell>
                           <TableCell className="text-right text-xs tabular-nums">
@@ -306,7 +303,7 @@ export default async function EigenaarMeterstandenPage() {
                           Totaal verbruikskost
                         </TableCell>
                         <TableCell className="text-right font-medium tabular-nums">
-                          {euro(verbruik.totaalKost)}
+                          {euro(u.verbruik.totaalKost)}
                         </TableCell>
                       </TableRow>
                     </TableBody>
@@ -315,11 +312,11 @@ export default async function EigenaarMeterstandenPage() {
               )}
 
               {/* Afrekening */}
-              {afr.length > 0 && (
+              {u.afrekeningen.length > 0 && (
                 <section>
                   <h3 className="mb-2 text-sm font-medium">Afrekening</h3>
-                  {afr.map((a) => {
-                    const aLijnen = lijnen.filter(
+                  {u.afrekeningen.map((a) => {
+                    const aLijnen = data.afrekeningLijnen.filter(
                       (l) => l.afrekening_id === a.id,
                     );
                     return (
@@ -362,9 +359,3 @@ export default async function EigenaarMeterstandenPage() {
     </div>
   );
 }
-
-const TYPE_LABEL: Record<string, string> = {
-  koud_water: "Koud water",
-  warm_water: "Warm water",
-  cv: "CV / verwarming",
-};

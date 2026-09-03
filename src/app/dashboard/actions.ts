@@ -92,9 +92,11 @@ export type DienMeteropnameResultaat =
   | { ok: false; error: string };
 
 /**
- * Een eigenaar dient een tellerfoto in voor zijn eigen appartement. De opname
- * belandt als `meteropname` (rol 'eigenaar', status 'nieuw') in de inbox van de
- * syndicus en wordt pas een echte `meterstand` na diens bevestiging.
+ * Een eigenaar dient een meterstand in voor zijn eigen appartement — via een
+ * tellerfoto (met OCR-voorstel) óf handmatig (teller + datum + waarde, zonder
+ * foto). De opname belandt als `meteropname` (rol 'eigenaar', status 'nieuw') in
+ * de inbox van de syndicus en wordt pas een echte `meterstand` na diens
+ * bevestiging.
  *
  * De storage-upload + `document`-rij vereisen de admin-client (bucket/tabel zijn
  * admin-only schrijfbaar); de eigendomscontrole gebeurt eerst met de RLS-client.
@@ -110,13 +112,36 @@ export async function dienMeteropnameIn(
   }
   try {
     const unit_id = str(formData, "unit_id");
-    const file = formData.get("file");
-    if (!unit_id || !(file instanceof File) || file.size === 0)
-      return { ok: false, error: "Geen foto ontvangen." };
-    if (!file.type.startsWith("image/"))
-      return { ok: false, error: "Enkel een foto (afbeelding) van de teller." };
-    if (file.size > 8 * 1024 * 1024)
-      return { ok: false, error: "De foto is groter dan 8 MB." };
+    if (!unit_id) return { ok: false, error: "Geen appartement." };
+
+    const fileRaw = formData.get("file");
+    const file =
+      fileRaw instanceof File && fileRaw.size > 0 ? fileRaw : null;
+    if (file) {
+      if (!file.type.startsWith("image/"))
+        return { ok: false, error: "Enkel een foto (afbeelding) van de teller." };
+      if (file.size > 8 * 1024 * 1024)
+        return { ok: false, error: "De foto is groter dan 8 MB." };
+    }
+
+    const teller_id = optStr(formData, "teller_id");
+    const opname_datum = optStr(formData, "opname_datum");
+    const raw = optStr(formData, "herkende_waarde");
+    const herkende_waarde =
+      raw != null && Number.isFinite(Number(raw.replace(",", ".")))
+        ? Number(raw.replace(",", "."))
+        : null;
+
+    // Handmatige opname (geen foto): teller, datum en waarde zijn verplicht.
+    if (!file) {
+      if (!teller_id || !opname_datum || herkende_waarde == null)
+        return {
+          ok: false,
+          error: "Kies de teller en vul de datum en meterstand in.",
+        };
+      if (herkende_waarde < 0)
+        return { ok: false, error: "De meterstand mag niet negatief zijn." };
+    }
 
     // Eigendomscontrole via RLS: alleen eigen eigenaar-records zijn zichtbaar.
     const rls = await createClient();
@@ -138,37 +163,35 @@ export async function dienMeteropnameIn(
     const { boekjaar } = await getActiveContext();
 
     const db = createAdminClient();
-    const pad = await uploadNaarDocumenten(db, unit.vme_id, file);
-    const { data: doc, error: docErr } = await db
-      .from("document")
-      .insert({
-        vme_id: unit.vme_id,
-        boekjaar_id: boekjaar?.id ?? null,
-        naam: file.name,
-        pad,
-        mimetype: file.type || null,
-        grootte: file.size,
-        categorie: "meterstand",
-      })
-      .select("id")
-      .single();
-    if (docErr) return { ok: false, error: docErr.message };
-
-    const raw = optStr(formData, "herkende_waarde");
-    const herkende_waarde =
-      raw != null && Number.isFinite(Number(raw.replace(",", ".")))
-        ? Number(raw.replace(",", "."))
-        : null;
+    let document_id: string | null = null;
+    if (file) {
+      const pad = await uploadNaarDocumenten(db, unit.vme_id, file);
+      const { data: doc, error: docErr } = await db
+        .from("document")
+        .insert({
+          vme_id: unit.vme_id,
+          boekjaar_id: boekjaar?.id ?? null,
+          naam: file.name,
+          pad,
+          mimetype: file.type || null,
+          grootte: file.size,
+          categorie: "meterstand",
+        })
+        .select("id")
+        .single();
+      if (docErr) return { ok: false, error: docErr.message };
+      document_id = doc.id as string;
+    }
 
     const { error } = await db.from("meteropname").insert({
       vme_id: unit.vme_id,
       unit_id,
-      teller_id: optStr(formData, "teller_id"),
+      teller_id,
       boekjaar_id: boekjaar?.id ?? null,
-      document_id: doc.id as string,
+      document_id,
       ingediend_door: userId,
       rol: "eigenaar",
-      opname_datum: optStr(formData, "opname_datum"),
+      opname_datum,
       herkende_waarde,
       herkend_meternummer: optStr(formData, "herkend_meternummer"),
       waarde: herkende_waarde,
