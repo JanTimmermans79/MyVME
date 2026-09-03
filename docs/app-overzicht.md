@@ -372,6 +372,12 @@ niet op datum. Terugval op een oude, niet-gesplitste `huurderwissel`-stand.
   syndicus. Die bevestigt ze (teller / datum / aanleiding / waarde) → er wordt
   een echte `meterstand` gemaakt; of wijst ze af. Een **eigenaarsopname wordt
   dus nooit vanzelf een `meterstand`** — de syndicus bevestigt altijd.
+- **Tellercontrole** (`src/lib/meteropname-validatie.ts`, `controleerTellerkeuze`):
+  de server dwingt af dat de gekozen teller bij het ingediende appartement hoort;
+  een herkend meternummer dat (exact) bij een teller van een **ander** appartement
+  hoort wordt altijd geweigerd; hoort het bij géén geregistreerde teller van het
+  eigen appartement, dan moet de eigenaar in de dialog aanvinken dat het toch zijn
+  teller is vóór hij mag verzenden.
 - De eigenaar ziet op zijn pagina zijn tellers, de status van zijn opnames en
   zijn verbruik/afrekening voor het boekjaar (bij een verhuurd appartement met
   de melding dat het verbruik met de huurder wordt afgerekend).

@@ -11,6 +11,7 @@ import {
 import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadNaarDocumenten } from "@/lib/documenten-upload";
+import { controleerTellerkeuze } from "@/lib/meteropname-validatie";
 import { EENHEIDSPRIJS_DEFAULTS, type TellerType } from "@/lib/types";
 
 const TYPES: TellerType[] = ["koud_water", "warm_water", "cv"];
@@ -381,6 +382,17 @@ export async function bewaarMeterfoto(
       return { ok: false, error: "De foto is groter dan 8 MB." };
 
     const db = createAdminClient();
+
+    const controle = await controleerTellerkeuze(db, {
+      vmeId: vme_id,
+      unitId: unit_id,
+      tellerId: optStr(formData, "teller_id"),
+      herkendMeternummer: optStr(formData, "herkend_meternummer"),
+      bevestigdEigenTeller: true, // syndicus: geen bevestigingsvinkje
+      rol: "syndicus",
+    });
+    if (!controle.ok) return { ok: false, error: controle.error };
+
     const pad = await uploadNaarDocumenten(db, vme_id, file);
     const { data: doc, error: docErr } = await db
       .from("document")

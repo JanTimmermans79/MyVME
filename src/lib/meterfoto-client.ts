@@ -70,11 +70,11 @@ export function matchTeller(
   if (!meternummer) return null;
   const norm = (s: string) => s.replace(/\D/g, "");
   const doel = norm(meternummer);
-  if (doel.length < 4) return null;
+  if (doel.length < 3) return null;
   for (const t of tellers) {
     if (!t.meternummer) continue;
     const n = norm(t.meternummer);
-    if (n.length >= 4 && (n === doel || doel.includes(n) || n.includes(doel)))
+    if (n.length >= 3 && (n === doel || doel.includes(n) || n.includes(doel)))
       return t.id;
   }
   return null;
