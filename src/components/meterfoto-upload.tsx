@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -78,6 +79,7 @@ export function MeterfotoUpload({
   const [tellerId, setTellerId] = useState("");
   const [datum, setDatum] = useState("");
   const [waarde, setWaarde] = useState("");
+  const [bevestig, setBevestig] = useState(false);
 
   const verwerk = (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -96,13 +98,24 @@ export function MeterfotoUpload({
       );
       setDatum(d ?? new Date().toISOString().slice(0, 10));
       setWaarde(ocr.waarde != null ? String(ocr.waarde) : "");
+      setBevestig(false);
     });
   };
 
   const sluit = () => {
     if (concept) URL.revokeObjectURL(concept.previewUrl);
     setConcept(null);
+    setBevestig(false);
   };
+
+  // Herkend meternummer dat bij geen enkele eigen teller past → de eigenaar moet
+  // expliciet bevestigen dat het toch zijn teller is (de server weigert een
+  // nummer dat aantoonbaar bij een ander appartement hoort sowieso).
+  const herkendNr = concept?.ocr.meternummer ?? null;
+  const nummerConflict =
+    rol === "eigenaar" &&
+    !!herkendNr &&
+    matchTeller(herkendNr, tellers) === null;
 
   const verzend = () => {
     if (!concept) return;
@@ -112,6 +125,10 @@ export function MeterfotoUpload({
     }
     if (!waarde.trim()) {
       toast.error("Vul de meterstand in.");
+      return;
+    }
+    if (nummerConflict && !bevestig) {
+      toast.error("Bevestig eerst dat dit je eigen teller is.");
       return;
     }
     const fd = new FormData();
@@ -124,6 +141,7 @@ export function MeterfotoUpload({
     fd.set("herkende_waarde", waarde.trim());
     if (concept.ocr.meternummer)
       fd.set("herkend_meternummer", concept.ocr.meternummer);
+    if (bevestig) fd.set("bevestig_eigen_teller", "1");
 
     startVerzend(async () => {
       const r =
@@ -231,6 +249,25 @@ export function MeterfotoUpload({
                 )}
               </div>
 
+              {nummerConflict && (
+                <div className="space-y-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-2.5 text-xs">
+                  <p>
+                    Het herkende meternummer{" "}
+                    <strong>{herkendNr}</strong> hoort bij geen enkele
+                    geregistreerde teller van {unitNaam}. Controleer of je de
+                    juiste meter fotografeerde.
+                  </p>
+                  <label className="flex items-start gap-2">
+                    <Checkbox
+                      checked={bevestig}
+                      onCheckedChange={(v) => setBevestig(v === true)}
+                      className="mt-0.5"
+                    />
+                    <span>Ik bevestig dat dit een teller van mijn appartement is.</span>
+                  </label>
+                </div>
+              )}
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="mf-datum">Opnamedatum</Label>
@@ -271,7 +308,11 @@ export function MeterfotoUpload({
             >
               Annuleren
             </Button>
-            <Button type="button" onClick={verzend} disabled={verzendt}>
+            <Button
+              type="button"
+              onClick={verzend}
+              disabled={verzendt || (nummerConflict && !bevestig)}
+            >
               {verzendt
                 ? "Bezig…"
                 : rol === "syndicus"

@@ -11,6 +11,7 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadNaarDocumenten } from "@/lib/documenten-upload";
+import { controleerTellerkeuze } from "@/lib/meteropname-validatie";
 import { getActiveContext } from "@/lib/vme-context";
 
 export async function updateEigenContact(
@@ -163,6 +164,19 @@ export async function dienMeteropnameIn(
     const { boekjaar } = await getActiveContext();
 
     const db = createAdminClient();
+
+    // Veiligheid: de gekozen teller moet bij dit appartement horen, en een
+    // herkend meternummer mag niet bij een ander appartement horen.
+    const controle = await controleerTellerkeuze(db, {
+      vmeId: unit.vme_id,
+      unitId: unit_id,
+      tellerId: teller_id,
+      herkendMeternummer: optStr(formData, "herkend_meternummer"),
+      bevestigdEigenTeller: str(formData, "bevestig_eigen_teller") === "1",
+      rol: "eigenaar",
+    });
+    if (!controle.ok) return { ok: false, error: controle.error };
+
     let document_id: string | null = null;
     if (file) {
       const pad = await uploadNaarDocumenten(db, unit.vme_id, file);
