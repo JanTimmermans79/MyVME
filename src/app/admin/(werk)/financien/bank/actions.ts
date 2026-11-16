@@ -3,58 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { runAdmin, str, type ActionState } from "@/lib/action-helpers";
 import { requireAdmin } from "@/lib/auth";
-import type { ParsedTx } from "@/lib/bank-parse";
 import {
-  classificeer,
-  type ClassifyContext,
-} from "@/lib/bank-classify";
+  bereidImportVoor,
+  bewaarUittreksel,
+  type ImportRow,
+} from "@/lib/bank-import";
 import { parseKbcPdf } from "@/lib/kbc-pdf";
 import type { VmeRekening } from "@/lib/types";
-import { createAdminClient } from "@/lib/supabase/admin";
-
-type Db = ReturnType<typeof createAdminClient>;
-
-async function classifyContext(
-  db: Db,
-  vmeId: string,
-  rekening: VmeRekening | null,
-): Promise<ClassifyContext> {
-  const { data: vme } = await db
-    .from("vme")
-    .select("iban, iban_reserve")
-    .eq("id", vmeId)
-    .maybeSingle<{ iban: string | null; iban_reserve: string | null }>();
-
-  const { data: units } = await db.from("unit").select("id").eq("vme_id", vmeId);
-  const unitIds = (units ?? []).map((u: { id: string }) => u.id);
-
-  const [{ data: eigenaars }, { data: huurders }, { data: relaties }] =
-    await Promise.all([
-      unitIds.length
-        ? db.from("eigenaar").select("unit_id, iban").in("unit_id", unitIds)
-        : Promise.resolve({ data: [] }),
-      unitIds.length
-        ? db.from("huurder").select("unit_id, iban").in("unit_id", unitIds)
-        : Promise.resolve({ data: [] }),
-      db
-        .from("bankrelatie")
-        .select("iban, type, mandaatreferte")
-        .eq("vme_id", vmeId),
-    ]);
-
-  return {
-    rekening,
-    vmeZichtIban: vme?.iban ?? null,
-    vmeSpaarIban: vme?.iban_reserve ?? null,
-    owners: (eigenaars ?? []) as { unit_id: string; iban: string | null }[],
-    occupants: (huurders ?? []) as { unit_id: string; iban: string | null }[],
-    bankrelaties: (relaties ?? []) as {
-      iban: string;
-      type: string;
-      mandaatreferte: string | null;
-    }[],
-  };
-}
 
 /** Server action: leest een KBC-PDF en geeft de herkende verrichtingen terug. */
 export async function parsePdfBankexport(
@@ -105,10 +60,6 @@ export async function parsePdfBankexport(
   }
 }
 
-interface ImportRow extends ParsedTx {
-  mandaatreferte?: string | null;
-}
-
 export async function importTransacties(
   _prev: ActionState,
   formData: FormData,
@@ -131,51 +82,12 @@ export async function importTransacties(
     if (!Array.isArray(rows) || rows.length === 0)
       return { ok: false, error: "Geen transacties om te importeren." };
 
-    const hashes = rows.map((r) => r.import_hash);
-    const { data: bestaande } = await db
-      .from("transactie")
-      .select("import_hash")
-      .eq("vme_id", vme_id)
-      .in("import_hash", hashes);
-    const bekend = new Set(
-      (bestaande ?? []).map((b: { import_hash: string }) => b.import_hash),
-    );
-
-    const ctx = await classifyContext(db, vme_id, rekening);
-
-    const nieuw = rows
-      .filter((r) => !bekend.has(r.import_hash))
-      .filter(
-        (r, i, arr) =>
-          arr.findIndex((x) => x.import_hash === r.import_hash) === i,
-      )
-      .map((r) => {
-        const c = classificeer(
-          {
-            bedrag: r.bedrag,
-            tegenpartij_naam: r.tegenpartij_naam,
-            tegenpartij_iban: r.tegenpartij_iban,
-            mededeling: r.mededeling,
-            mandaatreferte: r.mandaatreferte ?? null,
-          },
-          ctx,
-        );
-        return {
-          vme_id,
-          datum: r.datum,
-          bedrag: r.bedrag,
-          tegenpartij_naam: r.tegenpartij_naam,
-          tegenpartij_iban: r.tegenpartij_iban,
-          mededeling: r.mededeling,
-          bron,
-          rekening,
-          soort: c.soort,
-          import_hash: r.import_hash,
-          gematchte_unit_id: c.gematchte_unit_id,
-          betaler_type: c.betaler_type,
-          match_type: c.match_type,
-        };
-      });
+    const voorbereiding = await bereidImportVoor(db, vme_id, rows, {
+      bron,
+      rekening,
+      dedupeOpInhoud: str(formData, "dedupe_inhoud") === "1",
+    });
+    const { nieuw } = voorbereiding;
 
     if (nieuw.length === 0)
       return {
@@ -194,41 +106,29 @@ export async function importTransacties(
       const saldoEindRaw = str(formData, "saldo_eind");
       const bestandsnaam = str(formData, "bestandsnaam") || null;
 
-      const { data: bestaat } = await db
-        .from("bankuittreksel")
-        .select("id")
-        .eq("vme_id", vme_id)
-        .eq("rekening", rekening)
-        .eq("periode_van", periode_van)
-        .eq("periode_tot", periode_tot)
-        .maybeSingle();
-
-      if (!bestaat) {
-        await db.from("bankuittreksel").insert({
-          vme_id,
-          rekening,
-          bron,
-          periode_van,
-          periode_tot,
-          saldo_begin: saldoBeginRaw ? Number(saldoBeginRaw) : null,
-          saldo_eind: saldoEindRaw ? Number(saldoEindRaw) : null,
-          aantal_verrichtingen: rows.length,
-          bestandsnaam,
-        });
-      }
+      await bewaarUittreksel(db, vme_id, {
+        rekening,
+        bron,
+        periode_van,
+        periode_tot,
+        saldo_begin: saldoBeginRaw ? Number(saldoBeginRaw) : null,
+        saldo_eind: saldoEindRaw ? Number(saldoEindRaw) : null,
+        aantal: nieuw.length,
+        bestandsnaam,
+      });
     }
 
-    const auto = nieuw.filter((n) => n.match_type === "automatisch").length;
-    const teControleren = nieuw.filter(
-      (n) => n.match_type === "onbevestigd",
-    ).length;
     revalidatePath("/admin/financien/bank");
     revalidatePath("/admin", "layout");
+    const { automatisch, teControleren, duplicaten } = voorbereiding;
     return {
       ok: true,
-      message: `${nieuw.length} verrichting(en) geïmporteerd — ${auto} automatisch, ${teControleren} te controleren. ${
-        rows.length - nieuw.length
-      } duplica(a)t(en) overgeslagen.`,
+      message:
+        `${nieuw.length} nieuwe verrichting(en) geïmporteerd — ${automatisch} automatisch herkend, ` +
+        (teControleren === 0
+          ? "niets te controleren"
+          : `${teControleren} te controleren`) +
+        `. ${duplicaten} reeds bekend (overgeslagen).`,
     };
   });
 }
