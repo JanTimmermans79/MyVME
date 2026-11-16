@@ -28,7 +28,7 @@ export function kostenNaarRijen(
     tegenpartij: k.leverancier,
     categorie: k.categorie,
     rekening: rekeningVanKost(k),
-    bedrag: -Math.abs(Number(k.bedrag)), // een kost toont als uitgave
+    bedrag: -Number(k.bedrag), // een kost toont als uitgave; een krediet (negatieve kost) als inkomst
     href: `/admin/financien/kost/${k.id}`,
     acties: acties?.(k),
   }));
