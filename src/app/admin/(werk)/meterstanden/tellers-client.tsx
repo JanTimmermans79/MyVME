@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import type { Eenheidsprijs, Huurder, Teller } from "@/lib/types";
-import { EENHEIDSPRIJS_DEFAULTS } from "@/lib/types";
+import type { Huurder, Teller } from "@/lib/types";
 import { ActionForm } from "@/components/action-form";
 import { Field, SubmitButton } from "@/components/form";
 import { ConfirmSubmit } from "@/components/confirm-submit";
@@ -32,8 +31,6 @@ import {
   nieuweMeterstanden,
   updateMeterstanden,
   verwijderMeterstand,
-  setEenheidsprijs,
-  mazoutprijsUitLeveringen,
 } from "./actions";
 
 const TYPE_LABEL: Record<string, string> = {
@@ -60,74 +57,6 @@ const HUURDER_AANLEIDINGEN = new Set([
   "start_huurder",
   "huurderwissel",
 ]);
-
-export function EenheidsprijsForm({
-  vmeId,
-  boekjaarId,
-  huidig,
-}: {
-  vmeId: string;
-  boekjaarId: string;
-  huidig: Eenheidsprijs | null;
-}) {
-  const d = huidig ?? EENHEIDSPRIJS_DEFAULTS;
-  return (
-    <div className="space-y-3">
-      <ActionForm
-        action={setEenheidsprijs}
-        hiddenFields={{ vme_id: vmeId, boekjaar_id: boekjaarId }}
-        className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-      >
-        <Field
-          label="Water (€/m³)"
-          name="prijs_water_per_m3"
-          inputMode="decimal"
-          defaultValue={String(d.prijs_water_per_m3)}
-        />
-        <Field
-          label="Mazout (€/liter)"
-          name="mazoutprijs_per_liter"
-          inputMode="decimal"
-          defaultValue={String(d.mazoutprijs_per_liter)}
-        />
-        <Field
-          label="CV → liter/m³"
-          name="cv_liter_per_m3"
-          inputMode="decimal"
-          defaultValue={String(d.cv_liter_per_m3)}
-        />
-        <Field
-          label="Warm water → liter/m³"
-          name="warmwater_liter_per_m3"
-          inputMode="decimal"
-          defaultValue={String(d.warmwater_liter_per_m3)}
-        />
-        <Field
-          label="Administratiekost VME (%)"
-          name="administratie_pct"
-          inputMode="decimal"
-          defaultValue={String(d.administratie_pct ?? 0)}
-        />
-        <div className="sm:col-span-2 lg:col-span-4 space-y-1">
-          <SubmitButton>Opslaan</SubmitButton>
-          <p className="text-xs text-muted-foreground">
-            Het administratiepercentage wordt in de huurdersafrekening op het
-            eigen verbruik + aandeel gedeelde kosten gerekend. 0 % = niet
-            doorrekenen.
-          </p>
-        </div>
-      </ActionForm>
-      <ActionForm
-        action={mazoutprijsUitLeveringen}
-        hiddenFields={{ vme_id: vmeId, boekjaar_id: boekjaarId }}
-      >
-        <SubmitButton variant="outline" size="sm">
-          Mazoutprijs berekenen uit leveringen dit boekjaar
-        </SubmitButton>
-      </ActionForm>
-    </div>
-  );
-}
 
 export function MaakTellersButton({ unitId }: { unitId: string }) {
   return (

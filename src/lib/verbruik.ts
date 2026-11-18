@@ -3,6 +3,11 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { EENHEIDSPRIJS_DEFAULTS } from "@/lib/types";
 import type { BoekjaarPeriode } from "@/lib/boekjaar-transacties";
+import {
+  leesWaterTarief,
+  verdeelWater,
+  type WaterTarief,
+} from "@/lib/water-tarief";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -98,6 +103,40 @@ function cijferVoor(
     totaalKost: round2(koudKost + warmKost + stookolieKost),
     volledig: koud.volledig && warm.volledig && cv.volledig,
   };
+}
+
+/**
+ * Basis-/comforttarief toepassen op het watergebruik van alle appartementen
+ * samen (één aansluiting → één basisvolume, gelijk verdeeld over de units).
+ * Het waterbedrag per unit wordt naar verhouding over koud en warm gesplitst.
+ * Dit overzicht rekent over het hele boekjaar zonder huurderwissel-correcties;
+ * de eigenlijke afrekening (huurder-afrekening.ts) verdeelt naar bewoningsdagen.
+ */
+function pasWaterTariefToe(
+  cijfers: VerbruikCijfer[],
+  tarief: WaterTarief,
+): VerbruikCijfer[] {
+  if (cijfers.length === 0) return cijfers;
+  const toe = verdeelWater(
+    cijfers.map((c, i) => ({
+      id: String(i),
+      m3: c.koud + c.warm,
+      recht: tarief.basisvolume / cijfers.length,
+    })),
+    tarief,
+  );
+  return cijfers.map((c, i) => {
+    const water = toe.get(String(i))?.totaal ?? 0;
+    const m3 = c.koud + c.warm;
+    const koudKost = m3 > 0 ? round2((water * c.koud) / m3) : 0;
+    const warmKost = round2(water - koudKost);
+    return {
+      ...c,
+      koudKost,
+      warmKost,
+      totaalKost: round2(koudKost + warmKost + c.stookolieKost),
+    };
+  });
 }
 
 function optel(a: VerbruikCijfer, b: VerbruikCijfer): VerbruikCijfer {
@@ -266,7 +305,11 @@ export async function tellerOverzicht(
     });
   }
 
-  return units.map((u) => {
+  const tarief = leesWaterTarief(prijsRow as Parameters<typeof leesWaterTarief>[0]);
+  /** Aantal dagen waarover de jaarraming per unit is geëxtrapoleerd. */
+  const raamDagen = new Map<string, number | null>();
+
+  const overzicht = units.map((u) => {
     const ut = tellers.filter((t) => t.unit_id === u.id);
     const h = huurderVoorUnit.get(u.id) ?? null;
     let deltaWarm = 0;
@@ -379,13 +422,16 @@ export async function tellerOverzicht(
         (Date.parse(periodeEind) - Date.parse(periodeStart)) / 86_400_000,
       ) + 1;
     let geraamdeJaarkost: number | null = null;
+    raamDagen.set(u.id, null);
     if (laatsteMeting != null && laatsteMeting > periodeStart) {
       const dagen =
         Math.round(
           (Date.parse(laatsteMeting) - Date.parse(periodeStart)) / 86_400_000,
         ) + 1;
-      if (dagen > 20 && dagen < periodeDagen)
+      if (dagen > 20 && dagen < periodeDagen) {
         geraamdeJaarkost = round2((totaalKost / dagen) * 365);
+        raamDagen.set(u.id, dagen);
+      }
     }
 
     return {
@@ -399,6 +445,38 @@ export async function tellerOverzicht(
       voorschotJaar: round2((h?.voorschot ?? 0) * 12),
     };
   });
+
+  // Basis-/comforttarief: het watergebruik van alle appartementen samen bepaalt
+  // wat nog aan het basistarief valt; daarom pas achteraf, over alle units heen.
+  if (tarief && overzicht.length > 0) {
+    const waterM3 = (o: UnitTellerOverzicht) =>
+      o.regels
+        .filter((r) => r.type !== "cv")
+        .reduce((s, r) => s + r.delta, 0);
+    const toe = verdeelWater(
+      overzicht.map((o) => ({
+        id: o.unit_id,
+        m3: waterM3(o),
+        recht: tarief.basisvolume / overzicht.length,
+      })),
+      tarief,
+    );
+    for (const o of overzicht) {
+      const water = toe.get(o.unit_id)?.totaal ?? 0;
+      const koud = o.regels.find((r) => r.type === "koud_water");
+      const warm = o.regels.find((r) => r.type === "warm_water");
+      const m3 = waterM3(o);
+      if (koud && warm) {
+        koud.kost = m3 > 0 ? round2((water * koud.delta) / m3) : 0;
+        warm.kost = round2(water - koud.kost);
+      }
+      o.totaalKost = round2(o.regels.reduce((s, r) => s + r.kost, 0));
+      const dagen = raamDagen.get(o.unit_id);
+      if (dagen != null) o.geraamdeJaarkost = round2((o.totaalKost / dagen) * 365);
+    }
+  }
+
+  return overzicht;
 }
 
 export async function verbruik5Jaar(
@@ -461,8 +539,12 @@ export async function verbruik5Jaar(
   }
 
   const prijsPerBj = new Map<string, Prijs>();
-  for (const p of (prijsRows ?? []) as (Prijs & { boekjaar_id: string })[])
+  const tariefPerBj = new Map<string, WaterTarief>();
+  for (const p of (prijsRows ?? []) as (Prijs & { boekjaar_id: string })[]) {
     prijsPerBj.set(p.boekjaar_id, { ...EENHEIDSPRIJS_DEFAULTS, ...p });
+    const t = leesWaterTarief(p as Parameters<typeof leesWaterTarief>[0]);
+    if (t) tariefPerBj.set(p.boekjaar_id, t);
+  }
 
   const tellersPerUnit = new Map<string, { id: string; type: string }[]>();
   for (const t of tellers) {
@@ -477,16 +559,15 @@ export async function verbruik5Jaar(
   for (const bj of reeks) {
     const prijs = prijsPerBj.get(bj.id) ?? EENHEIDSPRIJS_DEFAULTS;
     let blokCijfer = { ...LEEG, volledig: true };
-    for (const u of units) {
-      const c = cijferVoor(
-        standenPerTeller,
-        tellersPerUnit.get(u.id) ?? [],
-        bj,
-        prijs,
-      );
-      (perUnit[u.id] ??= {})[bj.id] = c;
-      blokCijfer = optel(blokCijfer, c);
-    }
+    let cijfers = units.map((u) =>
+      cijferVoor(standenPerTeller, tellersPerUnit.get(u.id) ?? [], bj, prijs),
+    );
+    const tarief = tariefPerBj.get(bj.id);
+    if (tarief) cijfers = pasWaterTariefToe(cijfers, tarief);
+    units.forEach((u, i) => {
+      (perUnit[u.id] ??= {})[bj.id] = cijfers[i];
+      blokCijfer = optel(blokCijfer, cijfers[i]);
+    });
     blok[bj.id] = blokCijfer;
   }
 

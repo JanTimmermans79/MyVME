@@ -33,6 +33,7 @@ const GROEPEN: { titel: string; items: { href: string; label: string; hint: stri
         { href: "/admin/bankrelaties", label: "Leveranciers", hint: "Standaard toewijzing + verdeelwijze" },
         { href: "/admin/categorieen", label: "Categorieën", hint: "Kosten-/opbrengstcategorieën + groep" },
         { href: "/admin/verdeelsleutels", label: "Verdeelsleutels", hint: "Quotiteit-aandelen per appartement" },
+        { href: "/admin/instellingen/tarieven", label: "Tarieven & parameters", hint: "Water (basis-/comforttarief, m³), mazout, syndicus-% — per boekjaar" },
         { href: "/admin/mazout", label: "Mazout", hint: "Stookolieleveringen en prijs" },
       ],
     },

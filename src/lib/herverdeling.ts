@@ -23,7 +23,7 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 /** Welke tellerlijnen in de huurderafrekening bij een verbruikscategorie horen. */
 const METER_SOORTEN: Record<string, string[]> = {
-  "koud water": ["koud_water", "warm_water"],
+  "koud water": ["koud_water", "warm_water", "water_basis", "water_comfort"],
   mazout: ["stookolie"],
 };
 

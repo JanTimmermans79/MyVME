@@ -255,10 +255,11 @@ export default async function AfrekeningenPage() {
                         <TableHead>Appartement</TableHead>
                         <TableHead>Huurder</TableHead>
                         <TableHead>Periode</TableHead>
-                        <TableHead className="text-right">Voorschotten</TableHead>
-                        <TableHead className="text-right">Verbruik</TableHead>
-                        <TableHead className="text-right">Diverse</TableHead>
+                        <TableHead className="text-right">Stookolie</TableHead>
+                        <TableHead className="text-right">Water</TableHead>
+                        <TableHead className="text-right">Gedeelde kosten</TableHead>
                         <TableHead className="text-right">Totaal kosten</TableHead>
+                        <TableHead className="text-right">Voorschotten</TableHead>
                         <TableHead className="text-right">Saldo</TableHead>
                         <TableHead />
                       </TableRow>
@@ -267,12 +268,19 @@ export default async function AfrekeningenPage() {
                       {huurderResultaten.map((h) => {
                         const r = saldoRichting(h.saldo);
                         const opgeslagen = opgeslagenHuurder.get(h.huurder_id);
-                        const verbruik = h.lijnen
-                          .filter((l) => l.soort !== "gedeeld")
-                          .reduce((s, l) => s + l.bedrag, 0);
-                        const diverse = h.lijnen
-                          .filter((l) => l.soort === "gedeeld")
-                          .reduce((s, l) => s + l.bedrag, 0);
+                        const som = (soorten: string[]) =>
+                          h.lijnen
+                            .filter((l) => soorten.includes(l.soort))
+                            .reduce((s, l) => s + l.bedrag, 0);
+                        const stookolie = som(["stookolie"]);
+                        const water = som([
+                          "koud_water",
+                          "warm_water",
+                          "water_basis",
+                          "water_comfort",
+                        ]);
+                        // Gedeelde kosten incl. een eventuele administratiekost.
+                        const gedeeld = som(["gedeeld", "administratie"]);
                         const href = `/admin/afrekeningen/huurder/${h.huurder_id}?boekjaar=${boekjaar.id}`;
                         return (
                           <TableRow
@@ -308,16 +316,19 @@ export default async function AfrekeningenPage() {
                               {datum(h.periode_start)} – {datum(h.periode_eind)}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {euro(h.voorschot_ontvangen)}
+                              {euro(stookolie)}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {euro(verbruik)}
+                              {euro(water)}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
-                              {euro(diverse)}
+                              {euro(gedeeld)}
                             </TableCell>
-                            <TableCell className="text-right tabular-nums">
+                            <TableCell className="text-right font-medium tabular-nums">
                               {euro(h.totaal_kosten)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {euro(h.voorschot_ontvangen)}
                             </TableCell>
                             <TableCell className="text-right">
                               <Badge
@@ -327,6 +338,9 @@ export default async function AfrekeningenPage() {
                               >
                                 {euro(h.saldo)}
                               </Badge>
+                              <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                                {r.label}
+                              </span>
                             </TableCell>
                             <TableCell className="text-right text-xs">
                               <Link href={href} className="underline">
@@ -343,19 +357,36 @@ export default async function AfrekeningenPage() {
                       })}
                       <TableRow className="font-medium">
                         <TableCell colSpan={3}>Totaal</TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {euro(
-                            huurderResultaten.reduce(
-                              (s, h) => s + h.voorschot_ontvangen,
-                              0,
-                            ),
-                          )}
-                        </TableCell>
-                        <TableCell colSpan={2} />
+                        {[
+                          ["stookolie"],
+                          ["koud_water", "warm_water", "water_basis", "water_comfort"],
+                          ["gedeeld", "administratie"],
+                        ].map((soorten, i) => (
+                          <TableCell key={i} className="text-right tabular-nums">
+                            {euro(
+                              huurderResultaten.reduce(
+                                (s, h) =>
+                                  s +
+                                  h.lijnen
+                                    .filter((l) => soorten.includes(l.soort))
+                                    .reduce((x, l) => x + l.bedrag, 0),
+                                0,
+                              ),
+                            )}
+                          </TableCell>
+                        ))}
                         <TableCell className="text-right tabular-nums">
                           {euro(
                             huurderResultaten.reduce(
                               (s, h) => s + h.totaal_kosten,
+                              0,
+                            ),
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {euro(
+                            huurderResultaten.reduce(
+                              (s, h) => s + h.voorschot_ontvangen,
                               0,
                             ),
                           )}
