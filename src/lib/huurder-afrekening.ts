@@ -1,13 +1,29 @@
 import "server-only";
 
-import { EENHEIDSPRIJS_DEFAULTS, type TellerType } from "@/lib/types";
-import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  boekjaarOrFilter,
-  metBoekjaarFilter,
-} from "@/lib/boekjaar-transacties";
+  EENHEIDSPRIJS_DEFAULTS,
+  type Eenheidsprijs,
+  type TellerType,
+} from "@/lib/types";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { isSyndicusOpEigenaars, leesSyndicusPct } from "@/lib/syndicus";
+import {
+  leesWaterTarief,
+  verdeelWater,
+  type WaterDeel,
+  type WaterTarief,
+  type WaterToewijzing,
+} from "@/lib/water-tarief";
 
 type Db = ReturnType<typeof createAdminClient>;
+
+/** Leesbare namen van de rubrieken gedeelde kosten in de afrekening. */
+const RUBRIEK_LABEL: Record<string, string> = {
+  elektriciteit: "Elektriciteit gemeenschap",
+  schoonmaak: "Schoonmaak",
+  onderhoud: "Onderhoud verwarming en water",
+  diverse: "Diverse",
+};
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const round3 = (n: number) => Math.round((n + Number.EPSILON) * 1000) / 1000;
@@ -68,6 +84,15 @@ interface Ctx {
     eind_datum: string;
   };
   prijs: Record<keyof typeof EENHEIDSPRIJS_DEFAULTS, number>;
+  /**
+   * Basis-/comforttarief water. null = niet ingesteld → vaste prijs per m³
+   * (`prijs.prijs_water_per_m3`).
+   */
+  waterTarief: WaterTarief | null;
+  /** Toewijzing basis-/comfortvolume per huurder (enkel met waterTarief). */
+  waterToe: Map<string, WaterToewijzing>;
+  /** Meterverbruik per huurder (gedeeld tussen voorberekening en afrekening). */
+  deltaCache: Map<string, Promise<HuurderDeltas>>;
   /** % administratiekosten VME dat mee wordt doorgerekend aan de huurders. */
   administratiePct: number;
   /** Herkomst van de gebruikte mazoutprijs (gewogen gemiddelde uit leveringen?). */
@@ -93,11 +118,12 @@ async function laadContext(
     .select("*")
     .eq("vme_id", bj.vme_id)
     .eq("boekjaar_id", boekjaarId)
-    .maybeSingle<typeof EENHEIDSPRIJS_DEFAULTS>();
+    .maybeSingle<Eenheidsprijs>();
   const prijs: Record<keyof typeof EENHEIDSPRIJS_DEFAULTS, number> = {
     ...EENHEIDSPRIJS_DEFAULTS,
     ...(ep ?? {}),
   };
+  const waterTarief = leesWaterTarief(ep);
   const administratiePct = Math.max(0, Number(ep?.administratie_pct ?? 0));
 
   // Gewogen gemiddelde mazoutprijs uit de leveringen van dit boekjaar:
@@ -130,11 +156,17 @@ async function laadContext(
   // 'Gelijk over de huurders', per categorie (elektriciteit, schoonmaak, diverse,
   // incl. negatieve posten zoals de watergroep-terugbetaling).
   const perCategorie = new Map<string, number>();
+  let syndicusTotaal = 0;
   for (const k of (kosten ?? []) as {
     bedrag: number;
     verdeling: string;
     categorie: string;
   }[]) {
+    // Syndicuskosten op de eigenaars volgen het syndicus-% (zie onder).
+    if (isSyndicusOpEigenaars(k)) {
+      syndicusTotaal += Number(k.bedrag);
+      continue;
+    }
     if (k.verdeling !== "gelijk_huurders") continue;
     perCategorie.set(
       k.categorie,
@@ -142,9 +174,21 @@ async function laadContext(
     );
   }
 
+  // Syndicus: enkel het ingestelde % wordt aan de huurders doorgerekend; 0 % =
+  // helemaal niet. Het resterende deel blijft bij de eigenaars (afrekening.ts).
+  const syndicusPct = leesSyndicusPct(ep);
+  if (syndicusPct > 0 && syndicusTotaal !== 0)
+    perCategorie.set(
+      `syndicus (${syndicusPct}% doorgerekend)`,
+      round2((syndicusTotaal * syndicusPct) / 100),
+    );
+
   return {
     boekjaar: bj,
     prijs,
+    waterTarief,
+    waterToe: new Map(),
+    deltaCache: new Map(),
     administratiePct,
     mazoutBron,
     gedeeldPerCategorie: perCategorie,
@@ -276,29 +320,41 @@ async function meterDelta(
   };
 }
 
-async function berekenVoorHuurder(
+interface HuurderRijIn {
+  id: string;
+  unit_id: string;
+  naam: string;
+  voornaam: string | null;
+  email: string | null;
+  iban: string | null;
+  ingang_datum: string | null;
+  uitgang_datum: string | null;
+}
+
+interface HuurderDeltas {
+  koud: { delta: number; waarschuwing: string | null };
+  warm: { delta: number; waarschuwing: string | null };
+  cv: { delta: number; waarschuwing: string | null };
+}
+
+function huurderPeriode(bj: Ctx["boekjaar"], h: HuurderRijIn) {
+  const start = maxDate(bj.start_datum, h.ingang_datum ?? bj.start_datum);
+  const eind = minDate(bj.eind_datum, h.uitgang_datum ?? bj.eind_datum);
+  return { start, eind, dagen: dagenInclusief(start, eind) };
+}
+
+/** Meterverbruik (koud/warm/CV) van een huurder; één keer berekend per afrekening. */
+function deltasVoor(
   db: Db,
   ctx: Ctx,
-  huurder: {
-    id: string;
-    unit_id: string;
-    naam: string;
-    voornaam: string | null;
-    email: string | null;
-    iban: string | null;
-    ingang_datum: string | null;
-    uitgang_datum: string | null;
-  },
-  unitNaam: string,
-  afrekeningVerzonden: boolean,
+  huurder: HuurderRijIn,
   vorigeHuurderId: string | null,
-): Promise<HuurderAfrekeningResultaat> {
+): Promise<HuurderDeltas> {
+  const bestaand = ctx.deltaCache.get(huurder.id);
+  if (bestaand) return bestaand;
+
   const bj = ctx.boekjaar;
-  const periodeStart = maxDate(bj.start_datum, huurder.ingang_datum ?? bj.start_datum);
-  const periodeEind = minDate(bj.eind_datum, huurder.uitgang_datum ?? bj.eind_datum);
-  const dagen = dagenInclusief(periodeStart, periodeEind);
-  const boekjaarDagen = dagenInclusief(bj.start_datum, bj.eind_datum);
-  const naam = [huurder.voornaam, huurder.naam].filter(Boolean).join(" ");
+  const { start, eind } = huurderPeriode(bj, huurder);
   const vertrokkenInBoekjaar =
     huurder.uitgang_datum != null &&
     huurder.uitgang_datum >= bj.start_datum &&
@@ -307,6 +363,45 @@ async function berekenVoorHuurder(
     huurder.ingang_datum != null &&
     huurder.ingang_datum >= bj.start_datum &&
     huurder.ingang_datum <= bj.eind_datum;
+  const md = (t: TellerType) =>
+    meterDelta(
+      db,
+      huurder.unit_id,
+      t,
+      start,
+      eind,
+      // Grensstanden op naam alleen als de wissel in dit boekjaar viel.
+      vertrokkenInBoekjaar ? huurder.id : null,
+      aangekomenInBoekjaar ? huurder.id : null,
+      aangekomenInBoekjaar ? vorigeHuurderId : null,
+    );
+  const p = Promise.all([md("koud_water"), md("warm_water"), md("cv")]).then(
+    ([koud, warm, cv]) => ({ koud, warm, cv }),
+  );
+  ctx.deltaCache.set(huurder.id, p);
+  return p;
+}
+
+async function berekenVoorHuurder(
+  db: Db,
+  ctx: Ctx,
+  huurder: HuurderRijIn,
+  unitNaam: string,
+  afrekeningVerzonden: boolean,
+  vorigeHuurderId: string | null,
+): Promise<HuurderAfrekeningResultaat> {
+  const bj = ctx.boekjaar;
+  const {
+    start: periodeStart,
+    eind: periodeEind,
+    dagen,
+  } = huurderPeriode(bj, huurder);
+  const boekjaarDagen = dagenInclusief(bj.start_datum, bj.eind_datum);
+  const naam = [huurder.voornaam, huurder.naam].filter(Boolean).join(" ");
+  const vertrokkenInBoekjaar =
+    huurder.uitgang_datum != null &&
+    huurder.uitgang_datum >= bj.start_datum &&
+    huurder.uitgang_datum <= bj.eind_datum;
 
   const base: HuurderAfrekeningResultaat = {
     huurder_id: huurder.id,
@@ -336,51 +431,73 @@ async function berekenVoorHuurder(
 
   const waarschuwingen: string[] = [];
 
-  const md = (t: TellerType) =>
-    meterDelta(
-      db,
-      huurder.unit_id,
-      t,
-      periodeStart,
-      periodeEind,
-      // Grensstanden op naam alleen als de wissel in dit boekjaar viel.
-      vertrokkenInBoekjaar ? huurder.id : null,
-      aangekomenInBoekjaar ? huurder.id : null,
-      aangekomenInBoekjaar ? vorigeHuurderId : null,
-    );
-  const [koud, warm, cv] = await Promise.all([
-    md("koud_water"),
-    md("warm_water"),
-    md("cv"),
-  ]);
+  const { koud, warm, cv } = await deltasVoor(db, ctx, huurder, vorigeHuurderId);
   for (const w of [koud.waarschuwing, warm.waarschuwing, cv.waarschuwing])
     if (w) waarschuwingen.push(w);
 
-  const koudKost = round2(koud.delta * ctx.prijs.prijs_water_per_m3);
-  const warmKost = round2(warm.delta * ctx.prijs.prijs_water_per_m3);
+  const waterToe = ctx.waterTarief ? ctx.waterToe.get(huurder.id) : undefined;
+  const koudKost = waterToe
+    ? 0
+    : round2(koud.delta * ctx.prijs.prijs_water_per_m3);
+  const warmKost = waterToe
+    ? 0
+    : round2(warm.delta * ctx.prijs.prijs_water_per_m3);
+  const waterKostBasisComfort = waterToe
+    ? round2(waterToe.basisKost + waterToe.comfortKost)
+    : 0;
   const stookolieLiter = round3(
     cv.delta * ctx.prijs.cv_liter_per_m3 +
       warm.delta * ctx.prijs.warmwater_liter_per_m3,
   );
   const stookolieKost = round2(stookolieLiter * ctx.prijs.mazoutprijs_per_liter);
 
+  const waterLijnen: AfrekeningLijnInput[] =
+    waterToe && ctx.waterTarief
+      ? [
+          {
+            soort: "water_basis",
+            omschrijving:
+              `Water basistarief (koud ${koud.delta} + warm ${warm.delta} = ${waterToe.m3} m³; ` +
+              `aandeel basisvolume ${waterToe.recht} m³)`,
+            hoeveelheid: waterToe.basisM3,
+            eenheid: "m³",
+            eenheidsprijs: ctx.waterTarief.basisPrijs,
+            bedrag: waterToe.basisKost,
+          },
+          ...(waterToe.comfortM3 > 0
+            ? [
+                {
+                  soort: "water_comfort",
+                  omschrijving: "Water comforttarief (verbruik boven het basisvolume)",
+                  hoeveelheid: waterToe.comfortM3,
+                  eenheid: "m³",
+                  eenheidsprijs: ctx.waterTarief.comfortPrijs,
+                  bedrag: waterToe.comfortKost,
+                },
+              ]
+            : []),
+        ]
+      : [
+          {
+            soort: "koud_water",
+            omschrijving: "Koud water",
+            hoeveelheid: koud.delta,
+            eenheid: "m³",
+            eenheidsprijs: ctx.prijs.prijs_water_per_m3,
+            bedrag: koudKost,
+          },
+          {
+            soort: "warm_water",
+            omschrijving: "Warm water",
+            hoeveelheid: warm.delta,
+            eenheid: "m³",
+            eenheidsprijs: ctx.prijs.prijs_water_per_m3,
+            bedrag: warmKost,
+          },
+        ];
+
   const lijnen: AfrekeningLijnInput[] = [
-    {
-      soort: "koud_water",
-      omschrijving: "Koud water",
-      hoeveelheid: koud.delta,
-      eenheid: "m³",
-      eenheidsprijs: ctx.prijs.prijs_water_per_m3,
-      bedrag: koudKost,
-    },
-    {
-      soort: "warm_water",
-      omschrijving: "Warm water",
-      hoeveelheid: warm.delta,
-      eenheid: "m³",
-      eenheidsprijs: ctx.prijs.prijs_water_per_m3,
-      bedrag: warmKost,
-    },
+    ...waterLijnen,
     {
       soort: "stookolie",
       omschrijving:
@@ -407,7 +524,7 @@ async function berekenVoorHuurder(
     gedeeldAandeel += aandeel;
     lijnen.push({
       soort: "gedeeld",
-      omschrijving: `${categorie} (${round2(aandeelPct)}% — ${dagen}/${boekjaarDagen} dagen aanwezig)`,
+      omschrijving: `${RUBRIEK_LABEL[categorie] ?? categorie} (${round2(aandeelPct)}% — ${dagen}/${boekjaarDagen} dagen aanwezig)`,
       hoeveelheid: round2(aandeelPct),
       eenheid: "%",
       eenheidsprijs: round2(Number(totaal)),
@@ -419,7 +536,9 @@ async function berekenVoorHuurder(
   // Administratiekosten VME: een % op (individueel verbruik + aandeel gedeelde
   // kosten), enkel doorgerekend aan de huurders wanneer een percentage is
   // ingesteld bij de eenheidsprijzen van dit boekjaar.
-  const subtotaal = round2(koudKost + warmKost + stookolieKost + gedeeldAandeel);
+  const subtotaal = round2(
+    koudKost + warmKost + waterKostBasisComfort + stookolieKost + gedeeldAandeel,
+  );
   let administratieKost = 0;
   if (ctx.administratiePct > 0) {
     administratieKost = round2((subtotaal * ctx.administratiePct) / 100);
@@ -446,37 +565,26 @@ async function berekenVoorHuurder(
     (Number(vsh?.bedrag_per_maand ?? 0) * 12 * dagen) / boekjaarDagen,
   );
 
-  // voorschot ontvangen: gematchte huurder-VOORSCHOTTEN die bij dit boekjaar
-  // horen (expliciet boekjaar_id of anders datum). soort='afrekening' van vorig
-  // boekjaar telt dus NIET mee.
+  // Voorschot ontvangen: gematchte huurder-VOORSCHOTTEN op de zichtrekening
+  // waarvan de BOEKINGSDATUM in dit boekjaar valt. Een uitdrukkelijke
+  // boekjaar-koppeling op de transactie telt hier bewust niet: een te vroeg
+  // betaald voorschot (bv. november op 31/10) is al in de eindafrekening van het
+  // vorige boekjaar verwerkt. soort='afrekening' telt ook niet mee.
   type VsTx = {
     bedrag: number;
     tegenpartij_iban: string | null;
     datum: string;
-    boekjaar_id?: string | null;
   };
-  const tx = await metBoekjaarFilter<VsTx>(
-    () =>
-      db
-        .from("transactie")
-        .select("bedrag, tegenpartij_iban, datum, boekjaar_id")
-        .eq("gematchte_unit_id", huurder.unit_id)
-        .eq("betaler_type", "huurder")
-        .eq("soort", "voorschot")
-        .or(boekjaarOrFilter(bj))
-        .returns<VsTx[]>(),
-    () =>
-      db
-        .from("transactie")
-        .select("bedrag, tegenpartij_iban, datum")
-        .eq("gematchte_unit_id", huurder.unit_id)
-        .eq("betaler_type", "huurder")
-        .eq("soort", "voorschot")
-        .gte("datum", bj.start_datum)
-        .lte("datum", bj.eind_datum)
-        .returns<VsTx[]>(),
-    bj,
-  );
+  const { data: txData } = await db
+    .from("transactie")
+    .select("bedrag, tegenpartij_iban, datum")
+    .eq("gematchte_unit_id", huurder.unit_id)
+    .eq("betaler_type", "huurder")
+    .eq("soort", "voorschot")
+    .gte("datum", bj.start_datum)
+    .lte("datum", bj.eind_datum)
+    .returns<VsTx[]>();
+  const tx = txData ?? [];
   const eigenIban = normIban(huurder.iban);
   const inPeriode = (t: VsTx) =>
     t.datum >= periodeStart && t.datum <= periodeEind;
@@ -626,6 +734,30 @@ export async function berekenHuurderAfrekeningen(
   };
 
   const ctx = await laadContext(db, bjRow, deelfactorVoor);
+
+  // Basis-/comforttarief water: het basisvolume van de ene aansluiting wordt
+  // verdeeld over de aanwezige huurders (naar bewoningsdagen, met leegstand
+  // verdeeld over de bewoonde appartementen) vóór de afrekeningen worden gemaakt.
+  if (ctx.waterTarief) {
+    const delen: WaterDeel[] = [];
+    await Promise.all(
+      relevant.map(async (h) => {
+        const p = huurderPeriode(bjRow, h);
+        if (p.dagen === 0) return;
+        const d = await deltasVoor(db, ctx, h, vorigeHuurder.get(h.id) ?? null);
+        delen.push({
+          id: h.id,
+          m3: d.koud.delta + d.warm.delta,
+          recht:
+            bjDagen > 0
+              ? (ctx.waterTarief!.basisvolume * deelfactorVoor(p.start, p.eind)) /
+                bjDagen
+              : 0,
+        });
+      }),
+    );
+    ctx.waterToe = verdeelWater(delen, ctx.waterTarief);
+  }
 
   return Promise.all(
     relevant.map((h) =>

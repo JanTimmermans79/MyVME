@@ -11,6 +11,18 @@ function nz(s: string | null | undefined): string | null {
   return s ? s.replace(/\s+/g, "").toUpperCase() : null;
 }
 
+/**
+ * Soorten die niet aan een unit gekoppeld hoeven te worden: ze staan nooit in
+ * "Te controleren" en tellen niet mee als "te controleren" na een import.
+ */
+export const GEEN_MATCH_NODIG: TransactieSoort[] = [
+  "kost",
+  "interne_overboeking",
+  "rente",
+  "afrekening",
+  "kapitaalsoproep",
+];
+
 export interface ClassifyContext {
   rekening: VmeRekening | null;
   vmeZichtIban: string | null;
@@ -23,6 +35,7 @@ export interface ClassifyContext {
     iban: string;
     type: string;
     mandaatreferte: string | null;
+    naam_bevat?: string | null;
   }[];
 }
 
@@ -63,7 +76,9 @@ export function classificeer(
   const rel = ctx.bankrelaties.find(
     (r) =>
       (txIban && nz(r.iban) === txIban) ||
-      (tx.mandaatreferte && r.mandaatreferte === tx.mandaatreferte),
+      (tx.mandaatreferte && r.mandaatreferte === tx.mandaatreferte) ||
+      (r.naam_bevat &&
+        naam.toUpperCase().includes(r.naam_bevat.toUpperCase())),
   );
 
   // Verrichtingen met de eigen rekening als tegenpartij: bankrente (KBC boekt
@@ -88,6 +103,15 @@ export function classificeer(
       match_type: "automatisch",
     };
   }
+
+  // Creditrente staat in de KBC-CSV zonder tegenrekening: herken ze aan de naam.
+  if (!txIban && tx.bedrag > 0 && /^creditrente\b/i.test(naam || med))
+    return {
+      soort: "rente",
+      gematchte_unit_id: null,
+      betaler_type: null,
+      match_type: "automatisch",
+    };
 
   // vorig-boekjaar afrekening (niet meetellen als voorschot)
   if (tx.bedrag > 0 || RE_AFREKENING.test(med)) {

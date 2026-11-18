@@ -12,7 +12,7 @@ import { requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadNaarDocumenten } from "@/lib/documenten-upload";
 import { controleerTellerkeuze } from "@/lib/meteropname-validatie";
-import { EENHEIDSPRIJS_DEFAULTS, type TellerType } from "@/lib/types";
+import type { TellerType } from "@/lib/types";
 
 const TYPES: TellerType[] = ["koud_water", "warm_water", "cv"];
 
@@ -241,104 +241,6 @@ export async function updateMeterstanden(
     if (n === 0) return { ok: false, error: "Niets om aan te passen." };
     revalidatePath("/admin/meterstanden");
     return { ok: true, message: `${n} meterstand(en) bijgewerkt.` };
-  });
-}
-
-export async function setEenheidsprijs(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  return runAdmin(async (db) => {
-    const vme_id = str(formData, "vme_id");
-    const boekjaar_id = str(formData, "boekjaar_id");
-    if (!vme_id || !boekjaar_id)
-      return { ok: false, error: "VME en boekjaar zijn verplicht." };
-
-    const rec = {
-      vme_id,
-      boekjaar_id,
-      prijs_water_per_m3: num(formData, "prijs_water_per_m3"),
-      mazoutprijs_per_liter: num(formData, "mazoutprijs_per_liter"),
-      cv_liter_per_m3: num(formData, "cv_liter_per_m3"),
-      warmwater_liter_per_m3: num(formData, "warmwater_liter_per_m3"),
-      administratie_pct: Math.min(100, Math.max(0, num(formData, "administratie_pct"))),
-    };
-    const { error } = await db
-      .from("eenheidsprijs")
-      .upsert(rec, { onConflict: "vme_id,boekjaar_id" });
-    if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/meterstanden");
-    return { ok: true, message: "Eenheidsprijzen opgeslagen." };
-  });
-}
-
-/** Berekent de gewogen gemiddelde mazoutprijs uit de leveringen van het boekjaar. */
-export async function mazoutprijsUitLeveringen(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  return runAdmin(async (db) => {
-    const vme_id = str(formData, "vme_id");
-    const boekjaar_id = str(formData, "boekjaar_id");
-    if (!vme_id || !boekjaar_id) return { ok: false, error: "Ontbrekende gegevens." };
-
-    const { data: bj } = await db
-      .from("boekjaar")
-      .select("start_datum, eind_datum")
-      .eq("id", boekjaar_id)
-      .maybeSingle<{ start_datum: string; eind_datum: string }>();
-    if (!bj) return { ok: false, error: "Boekjaar niet gevonden." };
-
-    const { data: lev } = await db
-      .from("mazout_levering")
-      .select("liter, prijs_per_liter")
-      .eq("vme_id", vme_id)
-      .gte("datum", bj.start_datum)
-      .lte("datum", bj.eind_datum);
-
-    const rows = (lev ?? []) as { liter: number; prijs_per_liter: number }[];
-    const totLiter = rows.reduce((s, r) => s + Number(r.liter), 0);
-    if (totLiter <= 0)
-      return {
-        ok: false,
-        error: "Geen mazoutleveringen in dit boekjaar gevonden.",
-      };
-    const gewogen =
-      rows.reduce((s, r) => s + Number(r.liter) * Number(r.prijs_per_liter), 0) /
-      totLiter;
-
-    const current = await db
-      .from("eenheidsprijs")
-      .select("*")
-      .eq("vme_id", vme_id)
-      .eq("boekjaar_id", boekjaar_id)
-      .maybeSingle();
-
-    const rec = {
-      vme_id,
-      boekjaar_id,
-      prijs_water_per_m3:
-        current.data?.prijs_water_per_m3 ??
-        EENHEIDSPRIJS_DEFAULTS.prijs_water_per_m3,
-      cv_liter_per_m3:
-        current.data?.cv_liter_per_m3 ?? EENHEIDSPRIJS_DEFAULTS.cv_liter_per_m3,
-      warmwater_liter_per_m3:
-        current.data?.warmwater_liter_per_m3 ??
-        EENHEIDSPRIJS_DEFAULTS.warmwater_liter_per_m3,
-      administratie_pct:
-        current.data?.administratie_pct ??
-        EENHEIDSPRIJS_DEFAULTS.administratie_pct,
-      mazoutprijs_per_liter: Math.round(gewogen * 10000) / 10000,
-    };
-    const { error } = await db
-      .from("eenheidsprijs")
-      .upsert(rec, { onConflict: "vme_id,boekjaar_id" });
-    if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/meterstanden");
-    return {
-      ok: true,
-      message: `Mazoutprijs ingesteld op € ${rec.mazoutprijs_per_liter.toFixed(4)}/l (gewogen gemiddelde).`,
-    };
   });
 }
 

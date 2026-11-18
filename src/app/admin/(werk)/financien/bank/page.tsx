@@ -27,15 +27,8 @@ import {
   boekjaarOrFilter,
 } from "@/lib/boekjaar-transacties";
 import { suggestie, type Kandidaat } from "@/lib/bank-matching";
+import { GEEN_MATCH_NODIG } from "@/lib/bank-classify";
 
-// Soorten die niet aan een unit gekoppeld hoeven te worden.
-const GEEN_MATCH_NODIG = [
-  "kost",
-  "interne_overboeking",
-  "rente",
-  "afrekening",
-  "kapitaalsoproep",
-];
 import { BankImporter } from "./bank-importer";
 import { AssignRow } from "./assign-row";
 import { SoortSelect } from "./soort-select";
@@ -137,7 +130,7 @@ export default async function BankPage() {
         <CardHeader>
           <CardTitle>Bankexport importeren</CardTitle>
           <CardDescription>
-            KBC-PDF of XLS/XLSX. De app herkent de rekening (zicht/spaar) en de
+            KBC-PDF, KBC-CSV of XLS/XLSX. De app herkent de rekening (zicht/spaar) en de
             soort verrichting (voorschot, kost, afrekening vorig jaar, interne
             overboeking, kapitaalsoproep, …). Enkel <strong>voorschotten</strong>{" "}
             tellen mee in de jaarafrekening. Niets wordt stil genegeerd.
@@ -148,6 +141,8 @@ export default async function BankPage() {
             vmeId={active.id}
             boekjaarStart={boekjaar.start_datum}
             boekjaarEind={boekjaar.eind_datum}
+            zichtIban={active.iban}
+            spaarIban={active.iban_reserve}
           />
         </CardContent>
       </Card>

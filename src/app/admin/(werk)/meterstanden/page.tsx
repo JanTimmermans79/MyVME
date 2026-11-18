@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveContext } from "@/lib/vme-context";
@@ -22,7 +23,6 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type {
-  Eenheidsprijs,
   Huurder,
   Meteropname,
   Teller,
@@ -30,7 +30,6 @@ import type {
 } from "@/lib/types";
 import {
   EditMeterstandGroep,
-  EenheidsprijsForm,
   MaakTellersButton,
   MeternummerRij,
   NieuweMeterstandDialog,
@@ -49,20 +48,12 @@ export default async function TellersPage() {
 
   const supabase = await createClient();
 
-  const [{ data: prijs }, { data: units }] = await Promise.all([
-    supabase
-      .from("eenheidsprijs")
-      .select("*")
-      .eq("vme_id", active.id)
-      .eq("boekjaar_id", boekjaar.id)
-      .maybeSingle<Eenheidsprijs>(),
-    supabase
-      .from("unit")
-      .select("*")
-      .eq("vme_id", active.id)
-      .order("naam")
-      .returns<Unit[]>(),
-  ]);
+  const { data: units } = await supabase
+    .from("unit")
+    .select("*")
+    .eq("vme_id", active.id)
+    .order("naam")
+    .returns<Unit[]>();
   const unitIds = (units ?? []).map((u) => u.id);
 
   const [{ data: tellers }, { data: huurders }] = await Promise.all([
@@ -387,22 +378,17 @@ export default async function TellersPage() {
         })
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Eenheidsprijzen</CardTitle>
-          <CardDescription>
-            Per boekjaar. Water geldt voor koud én warm water. Stookolie ={" "}
-            (Δ CV × liter/m³ + Δ warm water × liter/m³) × mazoutprijs.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <EenheidsprijsForm
-            vmeId={active.id}
-            boekjaarId={boekjaar.id}
-            huidig={prijs ?? null}
-          />
-        </CardContent>
-      </Card>
+      <p className="text-sm text-muted-foreground">
+        Tarieven (water, mazout, basisvolume) en percentages stel je per boekjaar
+        in bij{" "}
+        <Link
+          href="/admin/instellingen/tarieven"
+          className="font-medium text-primary underline-offset-2 hover:underline"
+        >
+          Instellingen → Tarieven &amp; parameters
+        </Link>
+        .
+      </p>
     </div>
   );
 }

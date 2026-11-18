@@ -2,6 +2,7 @@ import "server-only";
 
 import type { BetalerType } from "@/lib/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isSyndicusOpEigenaars, leesSyndicusPct } from "@/lib/syndicus";
 import {
   boekjaarOrFilter,
   metBoekjaarFilter,
@@ -71,13 +72,28 @@ export async function berekenAfrekening(
     .select("bedrag, betaler_type, verdeling, verdeelsleutel_id, categorie")
     .eq("boekjaar_id", boekjaarId)
     .eq("status", "bevestigd");
-  const kostenList = (kosten ?? []) as {
-    bedrag: number;
-    betaler_type: BetalerType;
-    verdeling: string;
-    verdeelsleutel_id: string | null;
-    categorie: string;
-  }[];
+  const { data: epRow } = await db
+    .from("eenheidsprijs")
+    .select("*")
+    .eq("vme_id", boekjaar.vme_id)
+    .eq("boekjaar_id", boekjaarId)
+    .maybeSingle<{ syndicus_pct_huurders?: number | null }>();
+  const syndicusPct = leesSyndicusPct(epRow);
+  // Syndicuskosten: het % dat aan de huurders wordt doorgerekend (huurder-
+  // afrekening.ts) komt hier niet meer bij de eigenaars.
+  const kostenList = (
+    (kosten ?? []) as {
+      bedrag: number;
+      betaler_type: BetalerType;
+      verdeling: string;
+      verdeelsleutel_id: string | null;
+      categorie: string;
+    }[]
+  ).map((k) =>
+    isSyndicusOpEigenaars(k)
+      ? { ...k, bedrag: Number(k.bedrag) * (1 - syndicusPct / 100) }
+      : k,
+  );
 
   const sleutelIds = [
     ...new Set(

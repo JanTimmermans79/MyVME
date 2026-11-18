@@ -231,9 +231,35 @@ export async function vmeBoekjaarOverzicht(
 
   const us = (uittreksels ?? []) as {
     rekening: VmeRekening;
+    periode_tot: string;
     saldo_begin: number | null;
     saldo_eind: number | null;
   }[];
+
+  // Een bankafschrift kan doorlopen na het einde van het boekjaar (bv. tot 1/11
+  // terwijl het boekjaar op 31/10 eindigt). Het eindsaldo van dit boekjaar is
+  // dan het afschriftsaldo min wat er daarna al op de rekening is bijgekomen.
+  const laatsteTot = us.reduce(
+    (m, u) => (u.periode_tot > m ? u.periode_tot : m),
+    boekjaar.eind_datum,
+  );
+  const naEinde: Record<string, number> = {};
+  if (laatsteTot > boekjaar.eind_datum) {
+    const { data: na } = await db
+      .from("transactie")
+      .select("bedrag, rekening")
+      .eq("vme_id", vmeId)
+      .gt("datum", boekjaar.eind_datum)
+      .lte("datum", laatsteTot)
+      .returns<{ bedrag: number; rekening: VmeRekening | null }[]>();
+    for (const x of na ?? [])
+      if (x.rekening)
+        naEinde[x.rekening] = (naEinde[x.rekening] ?? 0) + Number(x.bedrag);
+  }
+  const zonderNaEinde = (cf: RekeningCashflow): RekeningCashflow =>
+    cf.saldoEind != null && naEinde[cf.rekening]
+      ? { ...cf, saldoEind: round2(cf.saldoEind - naEinde[cf.rekening]) }
+      : cf;
 
   // Enkel wat in DIT boekjaar nog gecontroleerd moet worden.
   const bankTeControleren = tx.filter(
@@ -243,8 +269,8 @@ export async function vmeBoekjaarOverzicht(
   ).length;
 
   return {
-    zicht: cashflowVoorRekening("zicht", tx, us),
-    spaar: cashflowVoorRekening("spaar", tx, us),
+    zicht: zonderNaEinde(cashflowVoorRekening("zicht", tx, us)),
+    spaar: zonderNaEinde(cashflowVoorRekening("spaar", tx, us)),
     bankTeControleren,
     aantalVoorschotten: tx.filter((t) => t.soort === "voorschot").length,
     aantalTransacties: tx.length,

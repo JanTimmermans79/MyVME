@@ -11,6 +11,11 @@ import {
   type Veld,
   type ParsedTx,
 } from "@/lib/bank-parse";
+import {
+  decodeCsv,
+  parseKbcCsv,
+  type KbcCsvGroep,
+} from "@/lib/kbc-csv";
 import { euro, datum as fmtDatum } from "@/lib/format";
 import { importTransacties, parsePdfBankexport } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -93,10 +98,14 @@ export function BankImporter({
   vmeId,
   boekjaarStart,
   boekjaarEind,
+  zichtIban,
+  spaarIban,
 }: {
   vmeId: string;
   boekjaarStart: string;
   boekjaarEind: string;
+  zichtIban: string | null;
+  spaarIban: string | null;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -105,13 +114,54 @@ export function BankImporter({
   const [mapping, setMapping] = useState<Mapping>({});
   const [fileName, setFileName] = useState("");
 
+  // KBC-CSV (herkend aan de header: geen kolomtoewijzing nodig)
+  const [kbc, setKbc] = useState<{
+    groepen: KbcCsvGroep[];
+    bestanden: string[];
+  } | null>(null);
+
   // PDF
   const [pdf, setPdf] = useState<PdfResultaat | null>(null);
   const [pdfName, setPdfName] = useState("");
 
   async function onXls(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
+    const file = files[0];
     if (!file) return;
+
+    // KBC-CSV('s): zicht- en spaarrekening mogen samen gekozen worden.
+    if (files.every((f) => /.csv$/i.test(f.name))) {
+      const groepen: KbcCsvGroep[] = [];
+      const fouten: string[] = [];
+      let allemaalKbc = true;
+      for (const f of files) {
+        const res = parseKbcCsv(decodeCsv(await f.arrayBuffer()), {
+          zicht: zichtIban,
+          spaar: spaarIban,
+        });
+        if (!res) {
+          allemaalKbc = false;
+          break;
+        }
+        groepen.push(...res.groepen);
+        fouten.push(...res.fouten);
+      }
+      if (allemaalKbc) {
+        setSheet(null);
+        setKbc({ groepen, bestanden: files.map((f) => f.name) });
+        if (fouten.length > 0)
+          toast.error(
+            `${fouten.length} rij(en) overgeslagen: ${fouten[0]}`,
+          );
+        return;
+      }
+      if (files.length > 1) {
+        toast.error("Dit zijn geen KBC-CSV-bestanden.");
+        return;
+      }
+    }
+
+    setKbc(null);
     setFileName(file.name);
     try {
       const parsed = parseWorkbook(await file.arrayBuffer());
@@ -188,6 +238,34 @@ export function BankImporter({
       } else {
         toast.error(res.error ?? "Import mislukt.");
       }
+    });
+  }
+
+  /** Eén import per rekening; telkens met periode + saldo uit het bestand. */
+  function importeerKbc(groepen: KbcCsvGroep[], bestanden: string[]) {
+    startTransition(async () => {
+      const meldingen: string[] = [];
+      for (const g of groepen) {
+        const fd = new FormData();
+        fd.set("vme_id", vmeId);
+        fd.set("bron", "xls");
+        fd.set("rekening", g.rekening);
+        fd.set("dedupe_inhoud", "1");
+        fd.set("rows", JSON.stringify(g.rijen));
+        fd.set("periode_van", g.periode_van);
+        fd.set("periode_tot", g.periode_tot);
+        if (g.saldo_begin != null) fd.set("saldo_begin", String(g.saldo_begin));
+        if (g.saldo_eind != null) fd.set("saldo_eind", String(g.saldo_eind));
+        fd.set("bestandsnaam", bestanden.join(", "));
+        const res = await importTransacties({ ok: false }, fd);
+        if (!res.ok) {
+          toast.error(`${g.rekening}rekening: ${res.error ?? "import mislukt"}`);
+          return;
+        }
+        meldingen.push(`${g.rekening}rekening: ${res.message}`);
+      }
+      toast.success(meldingen.join("\n"));
+      setKbc(null);
     });
   }
 
@@ -271,9 +349,57 @@ export function BankImporter({
             id="xlsfile"
             type="file"
             accept=".xls,.xlsx,.csv"
+            multiple
             onChange={onXls}
           />
+          <p className="text-xs text-muted-foreground">
+            KBC-exports (CSV) worden automatisch herkend: rekening, tegenpartij,
+            IBAN en mandaat worden uit het bestand gelezen. Je kan de zicht- en
+            spaarrekening samen kiezen. Verrichtingen die al via PDF
+            geïmporteerd zijn, worden overgeslagen.
+          </p>
         </div>
+
+        {kbc && (
+          <div className="space-y-4">
+            <p className="text-sm font-medium">
+              KBC-export herkend ({kbc.bestanden.join(", ")})
+            </p>
+            {kbc.groepen.map((g) => (
+              <div key={g.rekeningnummer} className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <Badge variant="secondary">
+                    {g.rekening === "spaar"
+                      ? "Spaarrekening (reservefonds)"
+                      : "Zichtrekening (werkrekening)"}
+                  </Badge>
+                  <span className="text-muted-foreground">
+                    {g.rekeningnummer} · {g.periode_van} → {g.periode_tot} ·{" "}
+                    {g.rijen.length} verrichtingen
+                  </span>
+                  {g.saldo_begin != null && g.saldo_eind != null && (
+                    <Badge
+                      variant={g.saldoKlopt === false ? "destructive" : "secondary"}
+                    >
+                      saldo {euro(g.saldo_begin)} → {euro(g.saldo_eind)}
+                      {g.saldoKlopt === true && " ✓ klopt"}
+                      {g.saldoKlopt === false && " ✗ klopt niet"}
+                    </Badge>
+                  )}
+                </div>
+                <PreviewTabel rows={g.rijen} />
+              </div>
+            ))}
+            <Button
+              onClick={() => importeerKbc(kbc.groepen, kbc.bestanden)}
+              disabled={pending || kbc.groepen.length === 0}
+            >
+              {pending
+                ? "Bezig…"
+                : `Importeer ${kbc.groepen.reduce((s, g) => s + g.rijen.length, 0)} verrichtingen`}
+            </Button>
+          </div>
+        )}
 
         {sheet && (
           <>

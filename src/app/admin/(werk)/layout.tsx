@@ -8,6 +8,13 @@ const NAV: NavGroup[] = [
   {
     items: [
       { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard" },
+    ],
+  },
+  {
+    // Volgorde van het boekjaar: kosten boeken -> voorschotten controleren ->
+    // meterstanden opnemen -> afrekenen.
+    label: "Boekjaar",
+    items: [
       {
         href: "/admin/financien",
         label: "Kosten & Opbrengsten",
@@ -16,6 +23,11 @@ const NAV: NavGroup[] = [
       { href: "/admin/voorschotten", label: "Voorschotten", icon: "voorschotten" },
       { href: "/admin/meterstanden", label: "Meterstanden", icon: "meterstanden" },
       { href: "/admin/afrekeningen", label: "Afrekeningen", icon: "afrekeningen" },
+    ],
+  },
+  {
+    label: "Beheer",
+    items: [
       { href: "/admin/actiepunten", label: "Actiepunten", icon: "actiepunten" },
       { href: "/admin/av", label: "Algemene Vergadering", icon: "av" },
       { href: "/admin/verzekeringen", label: "Verzekeringen", icon: "verzekeringen" },

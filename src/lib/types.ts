@@ -362,6 +362,12 @@ export interface Eenheidsprijs {
   cv_liter_per_m3: number;
   warmwater_liter_per_m3: number;
   administratie_pct: number;
+  /** Basis-/comforttarief water (optioneel; zie supabase/migrations/20261116100000). */
+  water_basisvolume_m3?: number | null;
+  water_basis_per_m3?: number | null;
+  water_comfort_per_m3?: number | null;
+  /** % van de syndicuskosten dat aan de huurders wordt doorgerekend (0 = niet). */
+  syndicus_pct_huurders?: number | null;
   created_at: string;
 }
 

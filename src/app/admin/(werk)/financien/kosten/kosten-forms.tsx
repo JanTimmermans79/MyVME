@@ -7,6 +7,7 @@ import { datum as fmtDatum } from "@/lib/format";
 import { ActionForm } from "@/components/action-form";
 import { Field, SubmitButton } from "@/components/form";
 import { ConfirmSubmit } from "@/components/confirm-submit";
+import { KostToewijzing } from "@/components/kost-toewijzing";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -26,50 +27,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createKost, updateKost, confirmKost, deleteKost } from "./actions";
-
-const CATEGORIEEN_FALLBACK = [
-  "koud water",
-  "warm water",
-  "centrale verwarming",
-  "mazout",
-  "elektriciteit",
-  "schoonmaak",
-  "onderhoud",
-  "administratie",
-  "verzekering",
-  "syndicus",
-  "onderhoud lift",
-  "grote werken",
-  "diverse",
-];
-
-function CategorieSelect({
-  categorieen,
-  defaultValue,
-}: {
-  categorieen: string[];
-  defaultValue?: string;
-}) {
-  const lijst = categorieen.length ? categorieen : CATEGORIEEN_FALLBACK;
-  const opties =
-    defaultValue && !lijst.includes(defaultValue)
-      ? [defaultValue, ...lijst]
-      : lijst;
-  return (
-    <Select name="categorie" defaultValue={defaultValue} required>
-      <SelectTrigger className="w-full">
-        <SelectValue placeholder="Kies categorie" />
-      </SelectTrigger>
-      <SelectContent>
-        {opties.map((c) => (
-          <SelectItem key={c} value={c} className="capitalize">
-            {c}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
 
 export function CreateKostForm({
   vmeId,
@@ -114,10 +71,7 @@ export function CreateKostForm({
         </Select>
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="categorie">Categorie</Label>
-        <CategorieSelect categorieen={categorieen} />
-      </div>
+      <KostToewijzing idPrefix="nieuw" categorieen={categorieen} />
 
       <Field label="Bedrag (EUR)" name="bedrag" inputMode="decimal" required />
       <Field label="Datum" name="datum" type="date" required />
@@ -135,29 +89,6 @@ export function CreateKostForm({
                 {v.naam}
               </SelectItem>
             ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="verdeling">Verdeling</Label>
-        <Select name="verdeling" defaultValue="gelijk_huurders">
-          <SelectTrigger id="verdeling" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="gelijk_huurders">
-              Gelijk over de huurders
-            </SelectItem>
-            <SelectItem value="individueel_verbruik">
-              Individueel verbruik (tellers)
-            </SelectItem>
-            <SelectItem value="per_quotiteit">
-              Per quotiteit (verdeelsleutel) — eigenaars
-            </SelectItem>
-            <SelectItem value="gelijk_eigenaars">
-              Gelijk over de eigenaars
-            </SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -183,13 +114,6 @@ export function CreateKostForm({
     </ActionForm>
   );
 }
-
-const VERDELING_OPTIES: { value: string; label: string }[] = [
-  { value: "gelijk_huurders", label: "Gelijk over de huurders" },
-  { value: "individueel_verbruik", label: "Individueel verbruik (tellers)" },
-  { value: "per_quotiteit", label: "Per quotiteit (verdeelsleutel) — eigenaars" },
-  { value: "gelijk_eigenaars", label: "Gelijk over de eigenaars" },
-];
 
 export function EditKostDialog({
   kost,
@@ -235,13 +159,12 @@ export function EditKostDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`cat-${kost.id}`}>Categorie</Label>
-            <CategorieSelect
-              categorieen={categorieen}
-              defaultValue={kost.categorie}
-            />
-          </div>
+          <KostToewijzing
+            idPrefix={`kt-${kost.id}`}
+            categorieen={categorieen}
+            defaultVerdeling={kost.verdeling}
+            defaultCategorie={kost.categorie}
+          />
           <div className="space-y-1.5">
             <Label htmlFor={`rek-${kost.id}`}>Rekening</Label>
             <Select name="rekening" defaultValue={kost.rekening ?? "zicht"}>
@@ -286,21 +209,6 @@ export function EditKostDialog({
                 {verdeelsleutels.map((v) => (
                   <SelectItem key={v.id} value={v.id}>
                     {v.naam}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`vd-${kost.id}`}>Verdeling</Label>
-            <Select name="verdeling" defaultValue={kost.verdeling}>
-              <SelectTrigger id={`vd-${kost.id}`} className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {VERDELING_OPTIES.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
                   </SelectItem>
                 ))}
               </SelectContent>
