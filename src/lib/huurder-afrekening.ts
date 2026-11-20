@@ -51,6 +51,14 @@ export interface AfrekeningLijnInput {
   bedrag: number;
 }
 
+/** Begin-/eindstand en verbruik van één meter binnen de afrekeningsperiode. */
+export interface MeterDetail {
+  begin: { datum: string; waarde: number } | null;
+  eind: { datum: string; waarde: number } | null;
+  delta: number;
+  waarschuwing: string | null;
+}
+
 export interface HuurderAfrekeningResultaat {
   huurder_id: string;
   unit_id: string;
@@ -72,8 +80,12 @@ export interface HuurderAfrekeningResultaat {
   totaal_kosten: number;
   voorschot_verwacht: number;
   voorschot_ontvangen: number;
+  /** Afgesproken maandelijks voorschot (bedrag_per_maand) in dit boekjaar. */
+  voorschot_per_maand: number;
   saldo: number; // ontvangen - totaal_kosten  (negatief => bijbetalen)
   waarschuwingen: string[];
+  /** Meterstanden (CV, warm en koud water) van de afrekeningsperiode. */
+  meters: { cv: MeterDetail; warm: MeterDetail; koud: MeterDetail };
 }
 
 interface Ctx {
@@ -208,7 +220,8 @@ async function meterDelta(
   startHuurderId: string | null,
   /** Vorige huurder van de unit — voor de terugval op een oude 'huurderwissel'. */
   vorigeHuurderId: string | null,
-): Promise<{ delta: number; waarschuwing: string | null }> {
+): Promise<MeterDetail> {
+  const leeg = { begin: null, eind: null } as const;
   const { data: teller } = await db
     .from("teller")
     .select("id")
@@ -216,7 +229,7 @@ async function meterDelta(
     .eq("type", type)
     .maybeSingle<{ id: string }>();
   if (!teller)
-    return { delta: 0, waarschuwing: `Geen teller "${type}" voor deze unit.` };
+    return { ...leeg, delta: 0, waarschuwing: `Geen teller "${type}" voor deze unit.` };
 
   const { data: standen } = await db
     .from("meterstand")
@@ -232,6 +245,7 @@ async function meterDelta(
   const alle = (standen ?? []) as Stand[];
   if (alle.length < 2)
     return {
+      ...leeg,
       delta: 0,
       waarschuwing: `Onvoldoende meterstanden voor "${type}".`,
     };
@@ -302,17 +316,24 @@ async function meterDelta(
 
   if (voor === na)
     return {
+      ...leeg,
       delta: 0,
       waarschuwing: `Slechts één bruikbare meterstand voor "${type}".`,
     };
 
+  const begin = { datum: voor.datum, waarde: Number(voor.waarde) };
+  const eind = { datum: na.datum, waarde: Number(na.waarde) };
   const delta = Number(na.waarde) - Number(voor.waarde);
   if (delta < 0)
     return {
+      begin,
+      eind,
       delta: 0,
       waarschuwing: `Negatief verbruik voor "${type}" (meter vervangen of foute stand?).`,
     };
   return {
+    begin,
+    eind,
     delta: round3(delta),
     waarschuwing: voorlopig
       ? `Voorlopig verbruik voor "${type}": nog geen definitieve eindstand, tussentijdse meting van ${na.datum} gebruikt.`
@@ -332,9 +353,9 @@ interface HuurderRijIn {
 }
 
 interface HuurderDeltas {
-  koud: { delta: number; waarschuwing: string | null };
-  warm: { delta: number; waarschuwing: string | null };
-  cv: { delta: number; waarschuwing: string | null };
+  koud: MeterDetail;
+  warm: MeterDetail;
+  cv: MeterDetail;
 }
 
 function huurderPeriode(bj: Ctx["boekjaar"], h: HuurderRijIn) {
@@ -421,6 +442,12 @@ async function berekenVoorHuurder(
     totaal_kosten: 0,
     voorschot_verwacht: 0,
     voorschot_ontvangen: 0,
+    voorschot_per_maand: 0,
+    meters: {
+      cv: { begin: null, eind: null, delta: 0, waarschuwing: null },
+      warm: { begin: null, eind: null, delta: 0, waarschuwing: null },
+      koud: { begin: null, eind: null, delta: 0, waarschuwing: null },
+    },
     saldo: 0,
     waarschuwingen: [],
   };
@@ -613,6 +640,8 @@ async function berekenVoorHuurder(
     totaal_kosten: totaalKosten,
     voorschot_verwacht: verwacht,
     voorschot_ontvangen: ontvangen,
+    voorschot_per_maand: Number(vsh?.bedrag_per_maand ?? 0),
+    meters: { cv, warm, koud },
     saldo: round2(ontvangen - totaalKosten),
     waarschuwingen,
   };

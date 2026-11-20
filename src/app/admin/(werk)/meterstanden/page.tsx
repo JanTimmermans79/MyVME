@@ -382,7 +382,7 @@ export default async function TellersPage() {
         Tarieven (water, mazout, basisvolume) en percentages stel je per boekjaar
         in bij{" "}
         <Link
-          href="/admin/instellingen/tarieven"
+          href="/admin/tarieven"
           className="font-medium text-primary underline-offset-2 hover:underline"
         >
           Instellingen → Tarieven &amp; parameters

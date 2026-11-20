@@ -6,6 +6,9 @@ import { usePathname } from "next/navigation";
 import {
   Building2,
   Calculator,
+  Coins,
+  Landmark,
+  PiggyBank,
   ChevronLeft,
   FileText,
   Gauge,
@@ -19,6 +22,7 @@ import {
   ShieldCheck,
   Upload,
   UserRound,
+  Users,
   Wallet,
   X,
 } from "lucide-react";
@@ -39,6 +43,11 @@ export const NAV_ICONS = {
   av: Gavel,
   verzekeringen: ShieldCheck,
   documenten: FileText,
+  vme: Building2,
+  tarieven: Coins,
+  huurders: Users,
+  zicht: Landmark,
+  spaar: PiggyBank,
   instellingen: Settings,
   config: Settings,
   contact: UserRound,
@@ -50,6 +59,8 @@ export interface NavItem {
   href: string;
   label: string;
   icon?: NavIconName;
+  /** Onderliggende menu's (getoond ingesprongen onder dit item). */
+  children?: NavItem[];
 }
 
 export interface NavGroup {
@@ -57,9 +68,18 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-function isActive(pathname: string, href: string) {
+function matches(pathname: string, volledigeHref: string) {
+  const href = volledigeHref.split("?")[0];
   if (href === "/admin" || href === "/dashboard") return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** Enkel het best passende (langste) menu-item is actief, ook als hrefs elkaar omvatten. */
+function isActive(pathname: string, href: string, alle: string[]) {
+  if (!matches(pathname, href)) return false;
+  return !alle.some(
+    (h) => h.split("?")[0].length > href.split("?")[0].length && matches(pathname, h),
+  );
 }
 
 export function AppShell({
@@ -83,6 +103,9 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const alleHrefs = nav.flatMap((g) =>
+    g.items.flatMap((i) => [i.href, ...(i.children ?? []).map((c) => c.href)]),
+  );
 
   const sidebar = (
     <div className="flex h-full w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
@@ -125,23 +148,42 @@ export function AppShell({
               </p>
             )}
             {group.items.map((item) => {
-              const active = isActive(pathname, item.href);
+              const active = isActive(pathname, item.href, alleHrefs);
               const Icon = item.icon ? NAV_ICONS[item.icon] : null;
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                    active
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                      : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                  )}
-                >
-                  {Icon && <Icon className="size-4 shrink-0" />}
-                  {item.label}
-                </Link>
+                <div key={item.href} className="space-y-0.5">
+                  <Link
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                      active
+                        ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                        : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                    )}
+                  >
+                    {Icon && <Icon className="size-4 shrink-0" />}
+                    {item.label}
+                  </Link>
+                  {item.children?.map((kind) => {
+                    const kindActief = isActive(pathname, kind.href, alleHrefs);
+                    return (
+                      <Link
+                        key={kind.href}
+                        href={kind.href}
+                        onClick={() => setOpen(false)}
+                        className={cn(
+                          "ml-7 block truncate rounded-md px-3 py-1.5 text-[0.8rem] transition-colors",
+                          kindActief
+                            ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                            : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                        )}
+                      >
+                        {kind.label}
+                      </Link>
+                    );
+                  })}
+                </div>
               );
             })}
           </div>
@@ -167,9 +209,9 @@ export function AppShell({
   );
 
   return (
-    <div className="flex min-h-dvh bg-linear-to-b from-app-bg-from to-app-bg-to">
+    <div className="flex min-h-dvh bg-linear-to-b from-app-bg-from to-app-bg-to print:bg-white">
       {/* desktop sidebar */}
-      <div className="sticky top-0 hidden h-dvh md:block">{sidebar}</div>
+      <div className="sticky top-0 hidden h-dvh md:block print:hidden">{sidebar}</div>
 
       {/* mobile drawer */}
       {open && (
@@ -183,7 +225,7 @@ export function AppShell({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border/60 bg-background/80 px-4 py-2.5 backdrop-blur">
+        <header className="sticky top-0 z-30 flex print:hidden items-center gap-3 border-b border-border/60 bg-background/80 px-4 py-2.5 backdrop-blur">
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -195,7 +237,7 @@ export function AppShell({
           <div className="ml-auto flex items-center gap-3">{contextBar}</div>
         </header>
 
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 print:max-w-none print:p-0">
           {children}
         </main>
       </div>

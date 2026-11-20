@@ -114,8 +114,19 @@ export interface Unit {
   naam: string;
   /** Aandeel in de gemene delen (bv. /1000). Stemgewicht op de AV. */
   quotiteit: number | null;
+  /** appartement, garagebox, parkeerplaats, ... (optioneel, zie migratie 20261120100000). */
+  type?: string | null;
   created_at: string;
 }
+
+export const UNIT_TYPES = [
+  "appartement",
+  "garagebox",
+  "parkeerplaats",
+  "berging",
+  "handelsruimte",
+  "andere",
+] as const;
 
 export interface Eigenaar {
   id: string;
@@ -127,6 +138,9 @@ export interface Eigenaar {
   telefoon: string | null;
   iban: string | null;
   structuurcode_prefix: string | null;
+  /** Eigendom vanaf / tot (verkocht). Een einddatum in het verleden = archief. */
+  ingang_datum?: string | null;
+  eind_datum?: string | null;
   created_at: string;
 }
 

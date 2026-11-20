@@ -21,7 +21,7 @@ const MIGRATIE =
   "supabase/migrations/20261116100000_water_tarief.sql";
 
 function revalideer() {
-  revalidatePath("/admin/instellingen/tarieven");
+  revalidatePath("/admin/tarieven");
   revalidatePath("/admin/meterstanden");
   revalidatePath("/admin/afrekeningen");
 }
@@ -52,7 +52,17 @@ export async function setTarieven(
     // Een leeg comforttarief wordt 2 × het basistarief (wettelijke verhouding).
     // Alles leeg = de vaste prijs per m³. Alleen het basisvolume of alleen het
     // basistarief is een vergissing.
-    const basisvolume = optGetal(formData, "water_basisvolume_m3");
+    // Basisvolume: ingegeven in liter (nieuw veld) of, voor oude formulieren, in m³.
+    const liter = optGetal(formData, "water_basisvolume_liter");
+    const basisvolume =
+      liter != null
+        ? Math.round((liter / 1000) * 100) / 100
+        : optGetal(formData, "water_basisvolume_m3");
+    if (basisvolume != null && basisvolume > 5000)
+      return {
+        ok: false,
+        error: `Een basisvolume van ${basisvolume.toLocaleString("nl-BE")} m³ per jaar lijkt veel te hoog voor één gebouw. Geef het volume in liter in (bv. 360000 voor 360 m³).`,
+      };
     const basis = optGetal(formData, "water_basis_per_m3");
     let comfort = optGetal(formData, "water_comfort_per_m3");
     const aantalIngevuld = [basisvolume, basis, comfort].filter(

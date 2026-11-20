@@ -1,5 +1,7 @@
 import "server-only";
 
+import { isActiefEigenaar } from "@/lib/archief";
+
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getActiveContext } from "@/lib/vme-context";
@@ -83,11 +85,13 @@ export async function eigenaarOverzicht(
   const supabase = await createClient();
   const { vme, boekjaar, boekjaren } = await getActiveContext();
 
-  const { data: eigenaars } = await supabase
+  const { data: alleEigenaars } = await supabase
     .from("eigenaar")
     .select("*")
     .returns<Eigenaar[]>();
-  if (!eigenaars || eigenaars.length === 0) return { leeg: "niet-gekoppeld" };
+  // Gearchiveerde eigenaars (kavel verkocht) zien het eigenaarsdashboard niet meer.
+  const eigenaars = (alleEigenaars ?? []).filter((e) => isActiefEigenaar(e));
+  if (eigenaars.length === 0) return { leeg: "niet-gekoppeld" };
   if (!vme) return { leeg: "geen-vme" };
 
   const { data: unitRows } = await supabase

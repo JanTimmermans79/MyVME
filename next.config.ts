@@ -20,6 +20,10 @@ const nextConfig: NextConfig = {
       { source: "/admin/tellers", destination: "/admin/meterstanden", permanent: true },
       { source: "/admin/tellers/:path*", destination: "/admin/meterstanden/:path*", permanent: true },
       { source: "/admin/config", destination: "/admin/instellingen", permanent: true },
+      { source: "/admin/units", destination: "/admin/vme/structuur", permanent: true },
+      { source: "/admin/eigenaars", destination: "/admin/vme/eigenaars", permanent: true },
+      { source: "/admin/huurders", destination: "/admin/vme/huurders", permanent: true },
+      { source: "/admin/instellingen/tarieven", destination: "/admin/tarieven", permanent: true },
     ];
   },
 };

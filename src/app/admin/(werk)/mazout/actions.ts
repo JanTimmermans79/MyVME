@@ -48,6 +48,7 @@ export async function createMazout(
     });
     if (error) return { ok: false, error: error.message };
     revalidatePath("/admin/mazout");
+    revalidatePath("/admin/tarieven");
     return { ok: true, message: "Levering geregistreerd." };
   });
 }
@@ -61,6 +62,7 @@ export async function deleteMazout(
     const { error } = await db.from("mazout_levering").delete().eq("id", id);
     if (error) return { ok: false, error: error.message };
     revalidatePath("/admin/mazout");
+    revalidatePath("/admin/tarieven");
     return { ok: true, message: "Levering verwijderd." };
   });
 }

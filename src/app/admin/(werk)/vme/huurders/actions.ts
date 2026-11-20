@@ -32,7 +32,7 @@ export async function createHuurder(
 
     const { error } = await db.from("huurder").insert({ unit_id, ...p });
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/huurders");
+    revalidatePath("/admin/vme/huurders");
     return { ok: true, message: "Huurder toegevoegd." };
   });
 }
@@ -46,9 +46,14 @@ export async function updateHuurder(
     const p = huurderPayload(formData);
     if (!id || !p.naam) return { ok: false, error: "Naam is verplicht." };
 
-    const { error } = await db.from("huurder").update(p).eq("id", id);
+    const unit_id = str(formData, "unit_id");
+    const { error } = await db
+      .from("huurder")
+      .update(unit_id ? { ...p, unit_id } : p)
+      .eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/huurders");
+    revalidatePath("/admin/vme/huurders");
+    revalidatePath("/admin", "layout");
     return { ok: true, message: "Opgeslagen." };
   });
 }
@@ -62,7 +67,7 @@ export async function deleteHuurder(
     if (!id) return { ok: false, error: "Geen huurder." };
     const { error } = await db.from("huurder").delete().eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/huurders");
+    revalidatePath("/admin/vme/huurders");
     return { ok: true, message: "Huurder verwijderd." };
   });
 }
