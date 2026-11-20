@@ -13,6 +13,7 @@ export function RekeningTabs({
 }) {
   const pathname = usePathname();
   const tabs = [
+    { href: `${basis}/transacties`, label: "Transacties" },
     { href: `${basis}/kosten`, label: "Kosten" },
     { href: `${basis}/opbrengsten`, label: "Opbrengsten" },
     { href: `${basis}/voorschotcontrole`, label: voorschotLabel },

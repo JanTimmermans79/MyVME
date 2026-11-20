@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveContext } from "@/lib/vme-context";
 import { datum } from "@/lib/format";
@@ -13,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import type { Eenheidsprijs } from "@/lib/types";
 import { TarievenForm } from "./tarieven-form";
+import type { LeveringRij } from "./prijsberekening";
 
 export const metadata = { title: "Tarieven & parameters" };
 
@@ -46,15 +45,18 @@ export default async function TarievenPage() {
     }
   }
 
+  const { data: leveringen } = await supabase
+    .from("mazout_levering")
+    .select("id, datum, leverancier, liter, prijs_per_liter, bedrag")
+    .eq("vme_id", vme.id)
+    .gte("datum", boekjaar.start_datum)
+    .lte("datum", boekjaar.eind_datum)
+    .order("datum")
+    .returns<LeveringRij[]>();
+
   return (
     <div className="space-y-5">
       <div>
-        <Link
-          href="/admin/instellingen"
-          className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="size-3.5" /> Instellingen
-        </Link>
         <h1 className="text-xl font-semibold">Tarieven &amp; parameters</h1>
         <p className="text-sm text-muted-foreground">
           Boekjaar {datum(boekjaar.start_datum)} – {datum(boekjaar.eind_datum)}.
@@ -86,6 +88,7 @@ export default async function TarievenPage() {
             vmeId={vme.id}
             boekjaarId={boekjaar.id}
             huidig={huidig ?? voorstel}
+            leveringen={leveringen ?? []}
           />
         </CardContent>
       </Card>

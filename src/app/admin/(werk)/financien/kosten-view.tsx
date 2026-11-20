@@ -18,7 +18,20 @@ import { KostenLijst } from "./kosten/kosten-lijst";
 import { KostenBeheer } from "./kosten/kosten-beheer";
 import { HerverdelingKaart } from "./kosten/herverdeling-kaart";
 
-export async function KostenView({ rekening }: { rekening: VmeRekening }) {
+const EIGENAAR_VERDELING = new Set(["gelijk_eigenaars", "per_quotiteit"]);
+
+/**
+ * Kostenlijst. Per rekening (zicht/spaar), of per groep: alle kosten die aan de
+ * huurders of aan de eigenaars worden doorgerekend, ongeacht de rekening.
+ */
+export async function KostenView({
+  rekening: rekeningProp,
+  groep,
+}: {
+  rekening?: VmeRekening;
+  groep?: "huurders" | "eigenaars";
+}) {
+  const rekening: VmeRekening = rekeningProp ?? "zicht";
   const { vme, boekjaar, boekjaren } = await getActiveContext();
   if (!vme || !boekjaar) return <NoBoekjaar />;
 
@@ -42,7 +55,7 @@ export async function KostenView({ rekening }: { rekening: VmeRekening }) {
 
   // Herverdeling van extra waterverbruik (besluit algemene vergadering).
   const herverdeling =
-    rekening === "zicht"
+    rekening === "zicht" && groep !== "eigenaars"
       ? await (async () => {
           await requireAdmin();
           const info = await laadHerverdelingInfo(
@@ -55,8 +68,12 @@ export async function KostenView({ rekening }: { rekening: VmeRekening }) {
         })()
       : null;
 
-  const kosten = (alleKosten ?? []).filter(
-    (k) => rekeningVanKost(k) === rekening,
+  const kosten = (alleKosten ?? []).filter((k) =>
+    groep
+      ? groep === "eigenaars"
+        ? EIGENAAR_VERDELING.has(k.verdeling)
+        : !EIGENAAR_VERDELING.has(k.verdeling)
+      : rekeningVanKost(k) === rekening,
   );
 
   return (
@@ -93,7 +110,12 @@ export async function KostenView({ rekening }: { rekening: VmeRekening }) {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            Kosten {rekening}rekening ({kosten.length})
+            {groep === "huurders"
+              ? "Onkosten huurders"
+              : groep === "eigenaars"
+                ? "Onkosten eigenaars"
+                : `Kosten ${rekening}rekening`}{" "}
+            ({kosten.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -102,6 +124,7 @@ export async function KostenView({ rekening }: { rekening: VmeRekening }) {
             boekjaren={boekjaren}
             verdeelsleutels={sleutels ?? []}
             categorieen={categorieen}
+            toonRekening={groep != null}
           />
         </CardContent>
       </Card>

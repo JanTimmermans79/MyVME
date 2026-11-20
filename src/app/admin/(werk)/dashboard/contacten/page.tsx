@@ -102,11 +102,11 @@ export default async function ContactenPage() {
           Boekjaar {datum(boekjaar.start_datum)} – {datum(boekjaar.eind_datum)} ·{" "}
           {aantalEigenaars} eigenaar(s), {huurdersInBoekjaar.length} huurder(s)
           actief in dit boekjaar. Beheren via{" "}
-          <Link href="/admin/eigenaars" className="underline">
+          <Link href="/admin/vme/eigenaars" className="underline">
             Eigenaars
           </Link>{" "}
           en{" "}
-          <Link href="/admin/huurders" className="underline">
+          <Link href="/admin/vme/huurders" className="underline">
             Huurders
           </Link>
           .

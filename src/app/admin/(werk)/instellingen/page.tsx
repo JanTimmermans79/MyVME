@@ -13,18 +13,9 @@ export const metadata = { title: "Instellingen" };
 const GROEPEN: { titel: string; items: { href: string; label: string; hint: string }[] }[] =
   [
     {
-      titel: "VME",
+      titel: "Boekjaren",
       items: [
-        { href: "/admin/vme", label: "VME-gegevens", hint: "Naam, adres, IBAN's, KBO-/juridische gegevens" },
         { href: "/admin/boekjaren", label: "Boekjaren", hint: "Periodes openen, afsluiten, verwijderen" },
-      ],
-    },
-    {
-      titel: "Structuur",
-      items: [
-        { href: "/admin/units", label: "Appartementen", hint: "Wooneenheden van deze VME" },
-        { href: "/admin/eigenaars", label: "Eigenaars", hint: "Eigenaar per appartement + login" },
-        { href: "/admin/huurders", label: "Huurders", hint: "Huurder, contactgegevens, huurperiode" },
       ],
     },
     {
@@ -33,7 +24,6 @@ const GROEPEN: { titel: string; items: { href: string; label: string; hint: stri
         { href: "/admin/bankrelaties", label: "Leveranciers", hint: "Standaard toewijzing + verdeelwijze" },
         { href: "/admin/categorieen", label: "Categorieën", hint: "Kosten-/opbrengstcategorieën + groep" },
         { href: "/admin/verdeelsleutels", label: "Verdeelsleutels", hint: "Quotiteit-aandelen per appartement" },
-        { href: "/admin/instellingen/tarieven", label: "Tarieven & parameters", hint: "Water (basis-/comforttarief, m³), mazout, syndicus-% — per boekjaar" },
         { href: "/admin/mazout", label: "Mazout", hint: "Stookolieleveringen en prijs" },
       ],
     },
@@ -47,8 +37,7 @@ export default async function InstellingenPage() {
       <div>
         <h1 className="text-xl font-semibold">Instellingen</h1>
         <p className="text-sm text-muted-foreground">
-          Centrale gegevens van {vme?.naam}. Deze worden hier één keer beheerd en
-          overal in de app hergebruikt.
+          Beheer van {vme?.naam}: boekjaren, leveranciers, categorieën, verdeelsleutels en mazoutleveringen. De VME-gegevens, structuur, eigenaars, huurders en tarieven vind je in het menu Boekjaar.
         </p>
       </div>
 

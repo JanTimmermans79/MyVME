@@ -142,3 +142,59 @@ export function EditHuurderDialog({ huurder }: { huurder: Huurder }) {
     </Dialog>
   );
 }
+
+/** Details van een actieve huurder, rechtstreeks aanpasbaar en op te slaan. */
+export function HuurderKaart({
+  huurder,
+  units,
+}: {
+  huurder: Huurder;
+  units: Unit[];
+}) {
+  return (
+    <div className="rounded-lg border p-4">
+      <ActionForm
+        action={updateHuurder}
+        hiddenFields={{ id: huurder.id }}
+        className="space-y-3"
+      >
+        <div className="space-y-1.5 sm:max-w-xs">
+          <Label>Appartement / kavel</Label>
+          <Select name="unit_id" defaultValue={huurder.unit_id}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {units.map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.naam}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Fields huurder={huurder} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <SubmitButton>Opslaan</SubmitButton>
+          <p className="text-xs text-muted-foreground">
+            Vul &quot;Huur geëindigd op&quot; in en sla op: de huurder gaat dan
+            naar het archief zodra die datum verstreken is.
+          </p>
+        </div>
+      </ActionForm>
+    </div>
+  );
+}
+
+export function ArchiefHuurderActies({ huurder }: { huurder: Huurder }) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <EditHuurderDialog huurder={huurder} />
+      <ActionForm action={deleteHuurder} hiddenFields={{ id: huurder.id }}>
+        <ConfirmSubmit message={`${huurder.naam} definitief verwijderen?`}>
+          Verwijderen
+        </ConfirmSubmit>
+      </ActionForm>
+    </div>
+  );
+}

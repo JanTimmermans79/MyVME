@@ -60,7 +60,7 @@ export async function createEigenaar(
     const ensured = await ensureAuthUser(db, email);
     if ("error" in ensured) return { ok: false, error: ensured.error };
 
-    const { error } = await db.from("eigenaar").insert({
+    const basis: Record<string, unknown> = {
       auth_user_id: ensured.userId,
       unit_id,
       naam,
@@ -69,15 +69,21 @@ export async function createEigenaar(
       telefoon: optStr(formData, "telefoon"),
       iban: optStr(formData, "iban"),
       structuurcode_prefix: optStr(formData, "structuurcode_prefix"),
-    });
+    };
+    const ingang_datum = optStr(formData, "ingang_datum");
+    let { error } = await db
+      .from("eigenaar")
+      .insert(ingang_datum ? { ...basis, ingang_datum } : basis);
+    if (error && /ingang_datum/.test(error.message))
+      ({ error } = await db.from("eigenaar").insert(basis)); // migratie nog niet gedraaid
     if (error) {
       if (error.code === "23505")
         return { ok: false, error: "Deze eigenaar is al aan deze unit gekoppeld." };
       return { ok: false, error: error.message };
     }
 
-    revalidatePath("/admin/eigenaars");
-    revalidatePath("/admin/units");
+    revalidatePath("/admin/vme/eigenaars");
+    revalidatePath("/admin/vme/structuur");
     return {
       ok: true,
       message: "Eigenaar aangemaakt. Er is een aanmeldlink verstuurd.",
@@ -92,12 +98,14 @@ export async function updateEigenaar(
   return runAdmin(async (db) => {
     const id = str(formData, "id");
     const naam = str(formData, "naam");
+    const unit_id = str(formData, "unit_id");
     if (!id || !naam) return { ok: false, error: "Naam is verplicht." };
 
     const { error } = await db
       .from("eigenaar")
       .update({
         naam,
+        ...(unit_id ? { unit_id } : {}),
         voornaam: optStr(formData, "voornaam"),
         email: optStr(formData, "email"),
         telefoon: optStr(formData, "telefoon"),
@@ -107,7 +115,8 @@ export async function updateEigenaar(
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
 
-    revalidatePath("/admin/eigenaars");
+    revalidatePath("/admin/vme/eigenaars");
+    revalidatePath("/admin/vme/structuur");
     return { ok: true, message: "Opgeslagen." };
   });
 }
@@ -135,11 +144,57 @@ export async function deleteEigenaar(
     const id = str(formData, "id");
     const { error } = await db.from("eigenaar").delete().eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/eigenaars");
-    revalidatePath("/admin/units");
+    revalidatePath("/admin/vme/eigenaars");
+    revalidatePath("/admin/vme/structuur");
     return {
       ok: true,
       message: "Koppeling verwijderd. Het gebruikersaccount blijft bestaan.",
     };
+  });
+}
+
+const MIGRATIE = "supabase/migrations/20261120100000_structuur_archief.sql";
+
+/**
+ * Appartement verkocht / eigenaar stopt: de eigenaar blijft bewaard in het
+ * archief met een einddatum (historische afrekeningen blijven kloppen).
+ */
+export async function archiveerEigenaar(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAdmin(async (db) => {
+    const id = str(formData, "id");
+    const eind = str(formData, "eind_datum") || new Date().toISOString().slice(0, 10);
+    if (!id) return { ok: false, error: "Geen eigenaar." };
+    if (!/^d{4}-d{2}-d{2}$/.test(eind))
+      return { ok: false, error: "Ongeldige datum." };
+    const { error } = await db.from("eigenaar").update({ eind_datum: eind }).eq("id", id);
+    if (error) {
+      if (/eind_datum/.test(error.message))
+        return {
+          ok: false,
+          error: `Archiveren kan pas nadat de migratie ${MIGRATIE} in de Supabase SQL Editor is uitgevoerd.`,
+        };
+      return { ok: false, error: error.message };
+    }
+    revalidatePath("/admin/vme/eigenaars");
+    revalidatePath("/admin", "layout");
+    return { ok: true, message: "Eigenaar gearchiveerd." };
+  });
+}
+
+export async function heractiveerEigenaar(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAdmin(async (db) => {
+    const id = str(formData, "id");
+    if (!id) return { ok: false, error: "Geen eigenaar." };
+    const { error } = await db.from("eigenaar").update({ eind_datum: null }).eq("id", id);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/admin/vme/eigenaars");
+    revalidatePath("/admin", "layout");
+    return { ok: true, message: "Eigenaar opnieuw actief." };
   });
 }

@@ -31,21 +31,44 @@ const HUURDER_AANLEIDINGEN = new Set([
   "huurderwissel",
 ]);
 
-/** Ligt `datum` (paar dagen marge) binnen het boekjaar? */
-function buitenBoekjaar(
+const nlDatum = (d: string) => d.split("-").reverse().join("/");
+
+/**
+ * Meterstanden horen bij het gekozen boekjaar: een datum buiten dat boekjaar
+ * geeft een melding (met het boekjaar waar de datum wel bij hoort).
+ */
+async function controleerBoekjaarDatum(
+  db: ReturnType<typeof createAdminClient>,
   datum: string,
   bjStart: string,
   bjEind: string,
-): string | null {
+): Promise<string | null> {
   if (!bjStart || !bjEind) return null;
-  const marge = (d: string, dagen: number) => {
-    const t = new Date(`${d}T00:00:00Z`);
-    t.setUTCDate(t.getUTCDate() + dagen);
-    return t.toISOString().slice(0, 10);
-  };
-  if (datum < marge(bjStart, -3) || datum > marge(bjEind, 3))
-    return `Datum valt buiten het boekjaar (${bjStart} – ${bjEind}).`;
-  return null;
+  if (datum >= bjStart && datum <= bjEind) return null;
+
+  const { data: gekozen } = await db
+    .from("boekjaar")
+    .select("vme_id")
+    .eq("start_datum", bjStart)
+    .eq("eind_datum", bjEind)
+    .limit(1)
+    .maybeSingle<{ vme_id: string }>();
+  let ander: { start_datum: string; eind_datum: string } | null = null;
+  if (gekozen) {
+    const { data } = await db
+      .from("boekjaar")
+      .select("start_datum, eind_datum")
+      .eq("vme_id", gekozen.vme_id)
+      .lte("start_datum", datum)
+      .gte("eind_datum", datum)
+      .limit(1)
+      .maybeSingle<{ start_datum: string; eind_datum: string }>();
+    ander = data;
+  }
+  const basis = `De datum ${nlDatum(datum)} ligt niet in het gekozen boekjaar (${nlDatum(bjStart)} – ${nlDatum(bjEind)}).`;
+  return ander
+    ? `${basis} Ze hoort bij boekjaar ${nlDatum(ander.start_datum)} – ${nlDatum(ander.eind_datum)}: kies dat boekjaar bovenaan en geef de stand daar in.`
+    : `${basis} Er bestaat geen boekjaar voor deze datum.`;
 }
 
 export async function maakTellers(
@@ -105,22 +128,13 @@ export async function nieuweMeterstanden(
         error: "Kies de huurder bij een einde- of startstand.",
       };
 
-    // Alleen standen binnen het gekozen boekjaar (paar dagen marge voor de
-    // eindstand die soms 1-2 dagen voor/na de boekjaargrens opgenomen wordt).
-    const bjStart = str(formData, "boekjaar_start");
-    const bjEind = str(formData, "boekjaar_eind");
-    if (bjStart && bjEind) {
-      const marge = (d: string, dagen: number) => {
-        const t = new Date(`${d}T00:00:00Z`);
-        t.setUTCDate(t.getUTCDate() + dagen);
-        return t.toISOString().slice(0, 10);
-      };
-      if (datum < marge(bjStart, -3) || datum > marge(bjEind, 3))
-        return {
-          ok: false,
-          error: `Datum valt buiten het boekjaar (${bjStart} – ${bjEind}). Kies het juiste boekjaar bovenaan.`,
-        };
-    }
+    const bjFout = await controleerBoekjaarDatum(
+      db,
+      datum,
+      str(formData, "boekjaar_start"),
+      str(formData, "boekjaar_eind"),
+    );
+    if (bjFout) return { ok: false, error: bjFout };
 
     const { data: tellers } = await db
       .from("teller")
@@ -194,20 +208,13 @@ export async function updateMeterstanden(
     const huurder_id = optStr(formData, "huurder_id");
     if (!datum) return { ok: false, error: "Datum is verplicht." };
 
-    const bjStart = str(formData, "boekjaar_start");
-    const bjEind = str(formData, "boekjaar_eind");
-    if (bjStart && bjEind) {
-      const marge = (d: string, dagen: number) => {
-        const t = new Date(`${d}T00:00:00Z`);
-        t.setUTCDate(t.getUTCDate() + dagen);
-        return t.toISOString().slice(0, 10);
-      };
-      if (datum < marge(bjStart, -3) || datum > marge(bjEind, 3))
-        return {
-          ok: false,
-          error: `Datum valt buiten het boekjaar (${bjStart} – ${bjEind}).`,
-        };
-    }
+    const bjFout = await controleerBoekjaarDatum(
+      db,
+      datum,
+      str(formData, "boekjaar_start"),
+      str(formData, "boekjaar_eind"),
+    );
+    if (bjFout) return { ok: false, error: bjFout };
 
     // huurder_id volgt de aanleiding: enkel einde/start-huurder draagt een huurder.
     const draagtHuurder = HUURDER_AANLEIDINGEN.has(aanleiding);
@@ -366,7 +373,8 @@ export async function bevestigMeteropname(
     if (HUURDER_AANLEIDINGEN.has(aanleiding) && !huurder_id)
       return { ok: false, error: "Kies de huurder bij een einde-/startstand." };
 
-    const bjFout = buitenBoekjaar(
+    const bjFout = await controleerBoekjaarDatum(
+      db,
       datum,
       str(formData, "boekjaar_start"),
       str(formData, "boekjaar_eind"),
